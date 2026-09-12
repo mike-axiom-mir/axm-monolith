@@ -7,8 +7,10 @@ explicit exclusion list, pins exact default-branch commit SHAs, and can material
 namespaced full-stack snapshot without modifying any source repository.
 
 When a build is finally enabled, the materialized stack is automatically passed to the
-local deterministic stack inspector so the output contains an offline capability map,
-candidate connection graph, human-test queue, and OPEN_ME.html dashboard.
+local deterministic stack inspector and the AI-native capability/user-facing generator.
+The result contains an offline capability map, candidate connection graph, human-test
+queue, and a default OPEN_ME.html Capability Lab with a machine input path into
+browser-facing surfaces.
 """
 
 from __future__ import annotations
@@ -27,7 +29,7 @@ import urllib.request
 from typing import Any, Callable, Iterable
 
 API_ROOT = "https://api.github.com"
-USER_AGENT = "axm-monolith/0.2"
+USER_AGENT = "axm-monolith/0.3"
 SELF_REPO = "mike-axiom-mir/axm-monolith"
 
 
@@ -171,7 +173,7 @@ def resolve_plan(
         modules.append({**repo, "commit": sha})
 
     return {
-        "schema_version": "0.2",
+        "schema_version": "0.3",
         "owner": config["owner"],
         "selection": config["selection"],
         "generated_at_utc": dt.datetime.now(dt.timezone.utc).replace(microsecond=0).isoformat(),
@@ -235,12 +237,15 @@ def materialize_module(module: dict[str, Any], modules_dir: Path, strip_git: boo
 def run_stack_analysis(output: Path) -> dict[str, Any]:
     try:
         from inspect_stack import analyze_build
+        from user_surface import generate_user_surface
     except ImportError as exc:
-        raise AssemblyError("stack inspector is missing; tools/inspect_stack.py must be present") from exc
+        raise AssemblyError("stack inspector/user surface is missing; tools/inspect_stack.py and tools/user_surface.py must be present") from exc
     try:
-        return analyze_build(output)
+        analysis = analyze_build(output)
+        user_surface = generate_user_surface(output)
+        return {**analysis, "user_surface": user_surface}
     except (ValueError, OSError, json.JSONDecodeError) as exc:
-        raise AssemblyError(f"stack analysis failed after materialization: {exc}") from exc
+        raise AssemblyError(f"stack analysis/user-surface generation failed after materialization: {exc}") from exc
 
 
 def build_monolith(config: dict[str, Any], output: Path, confirm: bool) -> dict[str, Any]:
@@ -272,7 +277,7 @@ def build_monolith(config: dict[str, Any], output: Path, confirm: bool) -> dict[
     (output / "INVENTORY.md").write_text("\n".join(inventory_lines), encoding="utf-8")
 
     manifest: dict[str, Any] = {
-        "schema_version": "0.2",
+        "schema_version": "0.3",
         "created_at_utc": dt.datetime.now(dt.timezone.utc).replace(microsecond=0).isoformat(),
         "source_lock": "axm-stack.lock.json",
         "module_count": len(materialized),
@@ -305,10 +310,10 @@ def build_parser() -> argparse.ArgumentParser:
     sub = parser.add_subparsers(dest="command", required=True)
     sub.add_parser("discover", help="read-only: print eligible and rejected repositories; resolve no commit pins")
     sub.add_parser("plan", help="read-only: resolve exact public default-branch heads and print a reproducible plan")
-    build = sub.add_parser("build", help="materialize an on-demand full-stack snapshot and analyze it")
+    build = sub.add_parser("build", help="materialize an on-demand full-stack snapshot, analyze it, and generate the default capability lab")
     build.add_argument("--output", required=True, help="new or empty output directory")
     build.add_argument("--confirm-build", action="store_true", help="required explicit acknowledgement; without it build refuses to create a monolith")
-    inspect = sub.add_parser("inspect", help="offline: analyze/re-analyze an already materialized build")
+    inspect = sub.add_parser("inspect", help="offline: analyze/re-analyze an already materialized build and regenerate the capability lab")
     inspect.add_argument("--build", required=True, help="existing monolith build directory")
     return parser
 

@@ -47,6 +47,32 @@
     },
     {
       "accepts": [
+        "assembly.config",
+        "communication.notice-snapshot",
+        "interface.machine-json"
+      ],
+      "description": "Run one local process-level Monolith to Machine Voice composition proof when a sibling or explicitly selected axm-machine-voice checkout is present. The runner preserves a local journal, accepts either a fresh grounded notice emission or exact duplicate suppression as healthy continuity evidence, and records an explicit result file. Repository CI tests the orchestrator against a fake external process; real cross-repository verification still requires running the command with the actual Machine Voice checkout.",
+      "evidence": {
+        "status": "orchestrator_fixture_tested_real_cross_repository_runtime_requires_local_run",
+        "boundary": "CI proves orchestration and current Monolith state export against a fake external process only; VERIFIED cross-repository runtime evidence exists only after a local/staged run with the real Machine Voice module"
+      },
+      "id": "test.machine-voice-local-composition",
+      "provides": [
+        "composition.test-result",
+        "evidence.runtime-composition"
+      ],
+      "tags": [
+        "monolith",
+        "machine-voice",
+        "composition",
+        "local",
+        "test",
+        "journal",
+        "evidence"
+      ]
+    },
+    {
+      "accepts": [
         "packet.counterexample"
       ],
       "description": "Consume an exact AXM Invariant Lab counterexample v0.1 packet as external bounded evidence while preserving FAIL/HOLD, rejecting authority escalation, and leaving Monolith pipeline status unchanged.",
@@ -85,6 +111,11 @@
       "path": "tools/export_machine_voice_state.py"
     },
     {
+      "command": "python tools/test_machine_voice_composition.py",
+      "kind": "python-cli",
+      "path": "tools/test_machine_voice_composition.py"
+    },
+    {
       "command": "python tools/import_invariant_packet.py <counterexample.json>",
       "kind": "python-cli",
       "path": "tools/import_invariant_packet.py"
@@ -92,7 +123,7 @@
   ],
   "module": {
     "name": "axm-monolith",
-    "purpose": "On-demand assembly, inspection, capability/pipeline discovery, bounded testing, explicit state handoff, and read-only external evidence consumption for the public AXM stack without erasing source identity."
+    "purpose": "On-demand assembly, inspection, capability/pipeline discovery, bounded testing, explicit state handoff, local composition evidence, and read-only external evidence consumption for the public AXM stack without erasing source identity."
   },
   "schema_version": "0.1",
   "tests": [
@@ -105,9 +136,13 @@
       "evidence": "checked-in config/assembly.json plus bounded fixtures"
     },
     {
+      "command": "python -m unittest tests.test_machine_voice_local_composition -v",
+      "evidence": "checked-in config/assembly.json plus fake external machine process; not real sibling runtime verification"
+    },
+    {
       "command": "python -m unittest tests.test_invariant_evidence_consumer -v",
       "evidence": "exact pinned AXM Invariant Lab counterexample v0.1 fixture"
     }
   ],
-  "truth_boundary": "Pipeline discovery is candidate evidence only. Machine Voice export is a state-contract handoff only and is not cross-repository runtime verification. Invariant Lab packet import preserves external FAIL/HOLD evidence but does not prove Monolith behavior, verify or invalidate a pipeline, or grant authority. This manifest grants no automatic execution, merge, CANON, installation, device, network, or assembly authority."
+  "truth_boundary": "Pipeline discovery is candidate evidence only. Machine Voice export is a state-contract handoff only. The local Machine Voice composition runner becomes cross-repository runtime evidence only when executed against a real local/staged Machine Voice checkout; repository CI uses a fake external process and must not be called runtime verification. Invariant Lab packet import preserves external FAIL/HOLD evidence but does not prove Monolith behavior, verify or invalidate a pipeline, or grant authority. This manifest grants no automatic execution, merge, CANON, installation, device, network, or assembly authority."
 }

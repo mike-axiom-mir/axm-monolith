@@ -2,86 +2,125 @@
 
 **Nickname: The Assembly**
 
-AXM Monolith is the on-demand integration surface for the public AXM stack.
+AXM Monolith is the on-demand integration and test surface for the public AXM stack.
 
-Its job is **not** to become another development home and it is **not** allowed to silently fork or flatten the source repositories. Its job is to answer a narrower question:
+Its job is **not** to become another development home and it is **not** allowed to silently fork or flatten the source repositories. Its job is to answer:
 
-> **At this exact moment, what does the current public AXM stack become when we assemble it together without erasing the identity of its parts?**
+> **At this exact moment, what does the current public AXM stack become when we assemble it together without erasing the identity of its parts — and what can the assembled stack actually show us about its capabilities, connections, tests, and unknowns?**
 
 ## Current status
 
-**Assembler foundation only. No monolith snapshot has been created yet.**
+**Assembler + deterministic capability inspector are ready. No monolith snapshot has been created yet.**
 
-The first real assembly is intentionally deferred until the current growth work has been reviewed/merged. Do not commit an assembled stack, generated lock file, or captured main-state snapshot to this repository merely because the assembler exists.
+The first real assembly remains intentionally deferred until the current growth work has been reviewed/merged. `config/assembly.json` keeps `build_enabled` set to `false`, so even an explicit `--confirm-build` is rejected until the hold is deliberately released.
 
 ## Source boundary
 
-The default source set is intentionally simple and hard to misread:
+The default source set is intentionally simple:
 
 - GitHub owner: `mike-axiom-mir`
 - **PUBLIC repositories only**
 - private repositories are rejected even if credentials can see them
 - forks are excluded by default
 - archived repositories are excluded by default
-- explicit exclusions are applied from `config/assembly.json`
+- explicit exclusions come from `config/assembly.json`
 - this repository excludes itself to prevent recursion
 
 The collaboration platform is explicitly excluded:
 
 - `mike-axiom-mir/axm-collaboration-platform`
 
-That exclusion is architectural, not accidental. The collaboration platform may later be called across its own protocol boundary, but it must not be directly absorbed into the stack.
-
-Keeping discovery public-only also provides a clean identity boundary: private repositories are not silently mixed into a monolith because the local machine or token happens to have access to them.
+That exclusion is architectural. The collaboration platform may later be called across its own protocol boundary, but its internals must not be directly absorbed into the monolith.
 
 ## On-demand model
 
-The Assembly has three modes:
-
 ```text
 discover   -> read-only list of eligible and rejected repositories
-plan       -> read-only exact default-branch SHA plan printed to stdout
-build      -> explicit materialization of the full public stack into a new output directory
+plan       -> read-only exact default-branch SHA plan
+build      -> explicit materialization + automatic offline stack analysis
+inspect    -> re-analyze an already materialized build without touching GitHub
 ```
 
 Nothing runs automatically.
 
-A real build requires the explicit `--confirm-build` flag.
+## What one future build does
 
-## What a build will do later
+After the hold is released and a build is explicitly requested, The Assembly will:
 
-When explicitly invoked, the assembler will:
+1. discover only eligible public owner repositories;
+2. apply explicit exclusions;
+3. resolve exact current default-branch SHAs;
+4. write `axm-stack.lock.json`;
+5. materialize every pinned repo under `modules/<repo>`;
+6. preserve per-module source/provenance;
+7. inventory files, languages, entrypoints, tests, schemas, assets, and optional native AXM manifests;
+8. build a capability registry;
+9. map candidate cross-module interfaces without pretending they are verified;
+10. derive bounded candidate composition chains;
+11. produce a machine test-command queue and a separate human-test queue;
+12. generate a dependency-free offline dashboard: **`OPEN_ME.html`**.
 
-1. query the configured owner's public repositories;
-2. reject anything outside the public/owner boundary;
-3. apply explicit exclusions;
-4. resolve the exact current default-branch commit SHA of every eligible repository;
-5. pin those SHAs into `axm-stack.lock.json` inside the generated output;
-6. materialize each repository at that exact SHA;
-7. keep every source repo in its own namespace under `modules/<repo>`;
-8. write source/provenance metadata into each module;
-9. produce a top-level manifest and inventory;
-10. leave every source repository untouched.
+The generated build will contain:
 
-The output is therefore a reproducible **point-in-time assembly**, not a claim that all components are mutually compatible or that every composition works.
+```text
+axm-stack.lock.json
+MONOLITH_MANIFEST.json
+INVENTORY.md
 
-## Why namespacing matters
+OPEN_ME.html
+STACK_REPORT.md
+STACK_ANALYSIS.json
+CAPABILITY_REGISTRY.json
+CONNECTION_GRAPH.json
+COMPOSITION_CANDIDATES.json
+HUMAN_TEST_QUEUE.json
+AUTOMATED_TEST_QUEUE.json
+
+analysis/modules/<repo>.json
+modules/<repo>/...
+```
+
+So the first thing Mike needs to do after assembly is simply open `OPEN_ME.html`.
+
+## Capability truth model
+
+The inspector distinguishes three broad evidence sources:
+
+```text
+native manifest       -> explicitly declared by the source module
+structural scan       -> deterministically visible in the captured files
+inference rule        -> useful lead derived from repo/readme structure
+```
+
+None of those automatically proves cross-module runtime interoperability.
+
+Candidate graph edges are labelled, for example:
+
+```text
+declared_contract_match_not_tested
+structurally_possible_not_tested
+inferred_candidate_not_tested
+```
+
+The Assembly never upgrades a candidate connection to `VERIFIED` merely because two repos were placed next to each other.
+
+See [`CAPABILITY_MODEL.md`](CAPABILITY_MODEL.md).
+
+## Namespacing
 
 The monolith must be whole without becoming identity soup.
 
 ```text
 monolith/
-  axm-stack.lock.json
-  MONOLITH_MANIFEST.json
-  INVENTORY.md
   modules/
     axm-state-research/
+    axm-universal-creation/
     axm-institution-fabric/
     axm-directional-state-fabric/
     ...
 ```
 
-Files from different repositories are never flattened into one directory simply because they share a filename or concept. Integration adapters can be built later from evidence.
+Same-named files never overwrite one another. Cross-module links are explicit graph relations or later adapters.
 
 ## Commands
 
@@ -97,34 +136,50 @@ Read-only exact-head plan:
 python tools/assemble.py plan
 ```
 
-Future explicit build example:
+Future build, only after the hold is deliberately released:
 
 ```bash
 python tools/assemble.py build \
-  --output ../axm-monolith-builds/2026-12-31-test \
+  --output ../axm-monolith-builds/<label> \
   --confirm-build
 ```
 
-**Do not run the build yet for the first stack test.** The current growth merge batch comes first.
+Re-run the offline analysis of an existing build:
+
+```bash
+python tools/assemble.py inspect --build ../axm-monolith-builds/<label>
+```
+
+Search capabilities after assembly:
+
+```bash
+python tools/inspect_stack.py query ../axm-monolith-builds/<label> game
+python tools/inspect_stack.py query ../axm-monolith-builds/<label> state
+```
+
+Ask for a candidate path between modules:
+
+```bash
+python tools/inspect_stack.py route ../axm-monolith-builds/<label> axm-universal-creation axm-institution-fabric
+```
+
+Routes remain `candidate_route_not_verified` until exercised.
 
 ## Truth boundary
 
-A successful assembly means only:
-
-- the selected public repositories were resolved;
-- exact SHAs were captured;
-- their contents were materialized under preserved namespaces;
-- provenance is reproducible.
+A successful assembly means the selected public repos were pinned, materialized, and inspected reproducibly.
 
 It does **not** mean:
 
-- the whole stack works together;
+- the whole stack already works as one runtime;
 - duplicated concepts are equivalent;
-- incompatible state models have been reconciled;
+- inferred capabilities are proven;
+- candidate graph edges are verified;
+- arbitrary discovered tests are safe to auto-run;
 - an untested composition is safe;
-- a module's claims become stronger because it is inside the monolith.
+- a module's claims become stronger merely because it is inside the monolith.
 
-Those are the experiments The Assembly exists to make easier.
+Those are exactly the questions The Assembly exists to make visible and testable.
 
 ## Start here
 
@@ -132,8 +187,10 @@ Future builders should read:
 
 1. [`START_HERE.md`](START_HERE.md)
 2. [`MONOLITH_BOUNDARY.md`](MONOLITH_BOUNDARY.md)
-3. [`config/assembly.json`](config/assembly.json)
-4. [`tools/assemble.py`](tools/assemble.py)
-5. [`NEXT_BUILD.md`](NEXT_BUILD.md)
+3. [`CAPABILITY_MODEL.md`](CAPABILITY_MODEL.md)
+4. [`config/assembly.json`](config/assembly.json)
+5. [`tools/assemble.py`](tools/assemble.py)
+6. [`tools/inspect_stack.py`](tools/inspect_stack.py)
+7. [`NEXT_BUILD.md`](NEXT_BUILD.md)
 
-The first goal is not “make everything compatible.” The first goal is **make the whole eligible public stack reproducibly inspectable at one moment without silently changing what any source repository is.**
+The first real snapshot still comes **after** the growth merge batch. Until then, build capability stays hard-disabled.

@@ -138,6 +138,22 @@ python tools/test_machine_voice_composition.py \
   --machine-voice-root /path/to/axm-machine-voice
 ```
 
+### Manual two-command fallback
+
+The previous explicit two-step proof remains valid and is intentionally kept as a transparent fallback:
+
+```bash
+python tools/export_machine_voice_state.py \
+  --output .generated/machine-voice-composition/MACHINE_VOICE_NOTICE.json
+
+python ../axm-machine-voice/machine_voice.py snapshot \
+  .generated/machine-voice-composition/MACHINE_VOICE_NOTICE.json \
+  --active-ref activity:assembly-control \
+  --journal .generated/machine-voice-composition/MACHINE_VOICE_COMMUNICATION.jsonl
+```
+
+The one-command runner is only orchestration around this same public boundary; it does not replace or hide the underlying contract.
+
 ## What repository CI proves
 
 CI still does **not** fetch or copy the real Machine Voice repository.

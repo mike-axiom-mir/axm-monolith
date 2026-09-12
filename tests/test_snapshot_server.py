@@ -2,10 +2,14 @@ import base64
 import importlib.util
 import json
 from pathlib import Path
+import sys
 import tempfile
 import unittest
 
-MODULE_PATH = Path(__file__).resolve().parents[1] / "tools" / "serve_snapshot.py"
+TOOLS = Path(__file__).resolve().parents[1] / "tools"
+if str(TOOLS) not in sys.path:
+    sys.path.insert(0, str(TOOLS))
+MODULE_PATH = TOOLS / "serve_snapshot.py"
 spec = importlib.util.spec_from_file_location("serve_snapshot", MODULE_PATH)
 serve_snapshot = importlib.util.module_from_spec(spec)
 assert spec.loader
@@ -41,6 +45,15 @@ class SnapshotServerTests(unittest.TestCase):
             self.assertNotIn("data_url", canvas)
             self.assertTrue((root / canvas["capture_path"]).exists())
             self.assertEqual(canvas["bytes"], len(PNG))
+
+    def test_server_state_exposes_reversible_stress_controller(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "STACK_ANALYSIS.json").write_text(json.dumps({"modules": []}), encoding="utf-8")
+            state = serve_snapshot.ServerState(root)
+            self.assertFalse(state.stress.status()["active"])
+            self.assertTrue(state.stress.start()["active"])
+            self.assertFalse(state.stress.stop()["active"])
 
 
 if __name__ == "__main__":

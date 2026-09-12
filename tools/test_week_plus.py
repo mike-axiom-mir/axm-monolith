@@ -15,6 +15,7 @@ import sys
 import time
 from typing import Any
 
+import one_click
 import test_drive
 import user_surface
 
@@ -29,7 +30,9 @@ def enhance_snapshot(workspace: Path) -> dict[str, Any]:
     snapshot = snapshot_dir(workspace)
     if not (snapshot / "STACK_ANALYSIS.json").exists():
         raise test_drive.TestDriveError("snapshot analysis is missing; build the saved plan first")
-    return user_surface.generate_user_surface(snapshot)
+    surface = user_surface.generate_user_surface(snapshot)
+    launchers = one_click.install_snapshot_launchers(snapshot)
+    return {**surface, "one_click": launchers}
 
 
 def build_and_prepare(config: Path, workspace: Path, confirm: bool) -> dict[str, Any]:
@@ -45,6 +48,8 @@ def lab_status(workspace: Path) -> dict[str, Any]:
         "capability_lab_ready": (snap / "OPEN_ME.html").exists() and (snap / "USER_FACING_SURFACES.json").exists(),
         "surface_registry_ready": (snap / "USER_FACING_SURFACES.json").exists(),
         "ai_input_protocol_ready": (snap / "AI_NATIVE_INPUT_PROTOCOL.json").exists(),
+        "one_click_windows_ready": (snap / "START_AXM.cmd").exists(),
+        "one_click_unix_ready": (snap / "START_AXM.sh").exists(),
     }
 
 
@@ -88,6 +93,7 @@ def status(config: Path, workspace: Path) -> dict[str, Any]:
 def interactive(config: Path, workspace: Path, port: int) -> int:
     print("AXM Monolith — first test week")
     print("Capability use + AI-native keyboard/visual-state lab is the default user-facing surface after build.")
+    print("Every completed snapshot also gets START_AXM.cmd / START_AXM.sh for one-click relaunch.")
     while True:
         try:
             current = status(config, workspace)
@@ -100,7 +106,7 @@ def interactive(config: Path, workspace: Path, port: int) -> int:
                 "\n3) Build EXACT saved plan + analyze + generate capability lab"
                 "\n4) Open capability lab (AI keyboard + visual-state capture)"
                 "\n5) Record guided human test results"
-                "\n6) Regenerate capability lab from existing snapshot"
+                "\n6) Regenerate capability lab + one-click launchers from existing snapshot"
                 "\n7) Exit"
             )
             choice = input("Choose: ").strip()

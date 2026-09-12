@@ -1,0 +1,114 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://axm.local/schemas/ai-input-command.schema.json",
+  "title": "AXM AI-native user input command",
+  "type": "object",
+  "required": ["actions"],
+  "additionalProperties": false,
+  "properties": {
+    "surface": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Optional surface id or module name. The open Capability Lab may switch to this surface before executing actions."
+    },
+    "label": {"type": "string"},
+    "actions": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 500,
+      "items": {
+        "oneOf": [
+          {"$ref": "#/$defs/keyAction"},
+          {"$ref": "#/$defs/typeText"},
+          {"$ref": "#/$defs/wait"},
+          {"$ref": "#/$defs/click"},
+          {"$ref": "#/$defs/clickSelector"},
+          {"$ref": "#/$defs/focusSelector"},
+          {"$ref": "#/$defs/reload"},
+          {"$ref": "#/$defs/snapshot"}
+        ]
+      }
+    }
+  },
+  "$defs": {
+    "keyAction": {
+      "type": "object",
+      "required": ["type", "key"],
+      "additionalProperties": false,
+      "properties": {
+        "type": {"enum": ["tap_key", "key_down", "key_up"]},
+        "key": {"type": "string"},
+        "code": {"type": "string"},
+        "duration_ms": {"type": "integer", "minimum": 0, "maximum": 60000},
+        "ctrl": {"type": "boolean"},
+        "alt": {"type": "boolean"},
+        "shift": {"type": "boolean"},
+        "meta": {"type": "boolean"}
+      }
+    },
+    "typeText": {
+      "type": "object",
+      "required": ["type", "text"],
+      "additionalProperties": false,
+      "properties": {
+        "type": {"const": "type_text"},
+        "text": {"type": "string"},
+        "interval_ms": {"type": "integer", "minimum": 0, "maximum": 10000}
+      }
+    },
+    "wait": {
+      "type": "object",
+      "required": ["type", "ms"],
+      "additionalProperties": false,
+      "properties": {
+        "type": {"const": "wait"},
+        "ms": {"type": "integer", "minimum": 0, "maximum": 600000}
+      }
+    },
+    "click": {
+      "type": "object",
+      "required": ["type", "x", "y"],
+      "additionalProperties": false,
+      "properties": {
+        "type": {"const": "click"},
+        "x": {"type": "number"},
+        "y": {"type": "number"},
+        "button": {"type": "integer", "minimum": 0, "maximum": 4}
+      }
+    },
+    "clickSelector": {
+      "type": "object",
+      "required": ["type", "selector"],
+      "additionalProperties": false,
+      "properties": {
+        "type": {"const": "click_selector"},
+        "selector": {"type": "string", "minLength": 1},
+        "button": {"type": "integer", "minimum": 0, "maximum": 4}
+      }
+    },
+    "focusSelector": {
+      "type": "object",
+      "required": ["type", "selector"],
+      "additionalProperties": false,
+      "properties": {
+        "type": {"const": "focus_selector"},
+        "selector": {"type": "string", "minLength": 1}
+      }
+    },
+    "reload": {
+      "type": "object",
+      "required": ["type"],
+      "additionalProperties": false,
+      "properties": {"type": {"const": "reload"}}
+    },
+    "snapshot": {
+      "type": "object",
+      "required": ["type"],
+      "additionalProperties": false,
+      "properties": {
+        "type": {"const": "snapshot"},
+        "label": {"type": "string"}
+      }
+    }
+  }
+}

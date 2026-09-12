@@ -1,0 +1,36 @@
+{
+  "$id": "https://github.com/mike-axiom-mir/axm-monolith/blob/main/schemas/PIPELINE_FABRIC.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": true,
+  "properties": {
+    "authority": {
+      "additionalProperties": false,
+      "properties": {
+        "automatic_canon": {"const": false},
+        "automatic_execution": {"const": false},
+        "automatic_install": {"const": false},
+        "automatic_merge": {"const": false}
+      },
+      "required": ["automatic_execution", "automatic_install", "automatic_merge", "automatic_canon"],
+      "type": "object"
+    },
+    "capabilities": {"items": {"type": "string"}, "type": "array"},
+    "outputs": {
+      "additionalProperties": false,
+      "properties": {
+        "candidates": {"type": "string"},
+        "gaps": {"type": "string"},
+        "graph": {"type": "string"}
+      },
+      "required": ["graph", "candidates", "gaps"],
+      "type": "object"
+    },
+    "schema": {"const": "axm.monolith.pipeline-fabric/v0.1"},
+    "schema_version": {"type": "string"},
+    "source": {"type": "string"},
+    "truth_boundary": {"type": "string"}
+  },
+  "required": ["schema", "schema_version", "source", "outputs", "capabilities", "authority", "truth_boundary"],
+  "title": "AXM Monolith Pipeline Fabric Descriptor",
+  "type": "object"
+}

@@ -33,13 +33,20 @@ class OneClickLauncherTests(unittest.TestCase):
             self.assertTrue(result["installed"])
             for name in (
                 "START_AXM.cmd", "START_AXM.sh", "START_HERE.txt", "AXM_LOCAL_SERVER.py",
+                "AXM_STRESS_ALL.py", "stress_all.py", "stress_all_v2.py",
                 "STRESS_ALL.html", "STRESS_ALL_ON.cmd", "STRESS_ALL_OFF.cmd",
             ):
                 self.assertTrue((root / name).exists(), name)
             self.assertIn("127.0.0.1", result["default_url"])
             self.assertIn("on demand", result["launch_model"])
             self.assertTrue(result["stress_controls"]["installed"])
+            self.assertEqual(result["adaptive_ram_policy"]["trigger_used_percent"], 98)
+            self.assertEqual(result["adaptive_ram_policy"]["target_used_percent"], 90)
             self.assertIn("AXM_STRESS_ALL_LINK_V0_1", (root / "OPEN_ME.html").read_text(encoding="utf-8"))
+            start_here = (root / "START_HERE.txt").read_text(encoding="utf-8")
+            self.assertIn("98%", start_here)
+            self.assertIn("90%", start_here)
+            self.assertIn("SHED_HISTORY.json", start_here)
 
     def test_windows_launcher_opens_local_front_door_not_every_runtime(self):
         with tempfile.TemporaryDirectory() as tmp:

@@ -9,10 +9,11 @@ Serves one already materialized snapshot from 127.0.0.1 and exposes a tiny local
 - GET  /api/stress/status inspect activate-all state and RAM pressure
 - POST /api/stress/start  switch activate-all stress mode ON
 - POST /api/stress/stop   switch activate-all stress mode OFF
+- POST /api/stress/browser-shed record one adaptive browser-surface shed
 
 Normal capability use does not execute source-module CLI commands. The stress endpoints are
-the explicit exception: they invoke the bounded application-entrypoint plan produced by
-stress_all.py and preserve an immediate OFF path.
+the explicit exception: they invoke the bounded application-entrypoint plan produced by the
+adaptive stress controller and preserve an immediate OFF path.
 """
 
 from __future__ import annotations
@@ -32,7 +33,7 @@ from typing import Any
 import urllib.parse
 import webbrowser
 
-from stress_all import StressController
+from stress_all_v2 import StressController
 
 MAX_JSON_BYTES = 25 * 1024 * 1024
 MAX_CANVAS_BYTES = 12 * 1024 * 1024
@@ -162,7 +163,7 @@ class ServerState:
 
 
 class SnapshotHandler(SimpleHTTPRequestHandler):
-    server_version = "AXMMonolithLocal/0.4"
+    server_version = "AXMMonolithLocal/0.5"
 
     def __init__(self, *args: Any, directory: str | None = None, **kwargs: Any):
         super().__init__(*args, directory=directory, **kwargs)
@@ -235,6 +236,11 @@ class SnapshotHandler(SimpleHTTPRequestHandler):
                     raise ValueError("stress stop body must be an object")
                 self._json(self.state.stress.stop())
                 return
+            if parsed.path == "/api/stress/browser-shed":
+                if not isinstance(payload, dict):
+                    raise ValueError("browser shed body must be an object")
+                self._json(self.state.stress.report_browser_shed(payload), status=201)
+                return
             if parsed.path == "/api/command":
                 command = validate_command(payload)
                 command.update({"id": self.state.next_command_id(), "queued_at_utc": utc_now()})
@@ -278,6 +284,7 @@ def serve(snapshot: Path, host: str = "127.0.0.1", port: int = 8765, open_browse
     print(f"Snapshot: {snapshot}")
     print("AI command endpoint: POST /api/command")
     print("Activate-all switch: /STRESS_ALL.html")
+    print("Adaptive RAM governor: 98% used trigger -> shed toward 90% used target")
     print("Evidence stays inside the pinned snapshot.")
     if open_browser:
         webbrowser.open(url)

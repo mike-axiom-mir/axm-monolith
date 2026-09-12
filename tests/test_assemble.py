@@ -1,4 +1,5 @@
 import importlib.util
+import json
 from pathlib import Path
 import tempfile
 import unittest
@@ -13,6 +14,7 @@ spec.loader.exec_module(assemble)
 class AssemblyBoundaryTests(unittest.TestCase):
     def setUp(self):
         self.config = {
+            "build_enabled": True,
             "owner": "mike-axiom-mir",
             "selection": {
                 "visibility": "public-only",
@@ -78,6 +80,13 @@ class AssemblyBoundaryTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             with self.assertRaises(assemble.AssemblyError):
                 assemble.build_monolith(self.config, Path(tmp) / "out", confirm=False)
+
+    def test_build_hold_blocks_materialization_even_with_confirmation(self):
+        held = dict(self.config)
+        held["build_enabled"] = False
+        with tempfile.TemporaryDirectory() as tmp:
+            with self.assertRaises(assemble.AssemblyError):
+                assemble.build_monolith(held, Path(tmp) / "out", confirm=True)
 
 
 if __name__ == "__main__":

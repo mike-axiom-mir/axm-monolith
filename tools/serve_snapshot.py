@@ -6,9 +6,13 @@ Serves one already materialized snapshot from 127.0.0.1 and exposes a tiny local
 - GET  /api/next-command pop the next sequence
 - POST /api/evidence      persist exact snapshot-bound user-facing evidence
 - POST /api/command-result record command completion metadata
+- GET  /api/stress/status inspect activate-all state and RAM pressure
+- POST /api/stress/start  switch activate-all stress mode ON
+- POST /api/stress/stop   switch activate-all stress mode OFF
 
-The server never executes source-module CLI commands. Browser-facing code executes only because
-the user/AI loads a captured module page in the test surface.
+Normal capability use does not execute source-module CLI commands. The stress endpoints are
+the explicit exception: they invoke the bounded application-entrypoint plan produced by
+stress_all.py and preserve an immediate OFF path.
 """
 
 from __future__ import annotations
@@ -27,6 +31,8 @@ import threading
 from typing import Any
 import urllib.parse
 import webbrowser
+
+from stress_all import StressController
 
 MAX_JSON_BYTES = 25 * 1024 * 1024
 MAX_CANVAS_BYTES = 12 * 1024 * 1024
@@ -137,6 +143,7 @@ class ServerState:
         self.command_sequence = 0
         self.evidence_sequence = 0
         self.result_sequence = 0
+        self.stress = StressController(snapshot)
 
     def next_command_id(self) -> int:
         with self.lock:
@@ -155,7 +162,7 @@ class ServerState:
 
 
 class SnapshotHandler(SimpleHTTPRequestHandler):
-    server_version = "AXMMonolithLocal/0.3"
+    server_version = "AXMMonolithLocal/0.4"
 
     def __init__(self, *args: Any, directory: str | None = None, **kwargs: Any):
         super().__init__(*args, directory=directory, **kwargs)
@@ -196,8 +203,12 @@ class SnapshotHandler(SimpleHTTPRequestHandler):
                 "local_only": True,
                 "snapshot": str(self.state.snapshot),
                 "queued_commands": self.state.commands.qsize(),
-                "truth_boundary": "server provides local transport and evidence persistence; it does not make synthetic events trusted browser input",
+                "stress_active": self.state.stress.status()["active"],
+                "truth_boundary": "server provides local transport/evidence and explicit stress control; synthetic events remain untrusted browser input",
             })
+            return
+        if parsed.path == "/api/stress/status":
+            self._json(self.state.stress.status())
             return
         if parsed.path == "/api/next-command":
             try:
@@ -214,6 +225,16 @@ class SnapshotHandler(SimpleHTTPRequestHandler):
         parsed = urllib.parse.urlparse(self.path)
         try:
             payload = self._read_json()
+            if parsed.path == "/api/stress/start":
+                if not isinstance(payload, dict):
+                    raise ValueError("stress start body must be an object")
+                self._json(self.state.stress.start(), status=202)
+                return
+            if parsed.path == "/api/stress/stop":
+                if not isinstance(payload, dict):
+                    raise ValueError("stress stop body must be an object")
+                self._json(self.state.stress.stop())
+                return
             if parsed.path == "/api/command":
                 command = validate_command(payload)
                 command.update({"id": self.state.next_command_id(), "queued_at_utc": utc_now()})
@@ -256,7 +277,8 @@ def serve(snapshot: Path, host: str = "127.0.0.1", port: int = 8765, open_browse
     print(f"AXM capability lab: {url}")
     print(f"Snapshot: {snapshot}")
     print("AI command endpoint: POST /api/command")
-    print("Evidence is written only inside snapshot/evidence/user-facing/.")
+    print("Activate-all switch: /STRESS_ALL.html")
+    print("Evidence stays inside the pinned snapshot.")
     if open_browser:
         webbrowser.open(url)
     try:
@@ -264,6 +286,7 @@ def serve(snapshot: Path, host: str = "127.0.0.1", port: int = 8765, open_browse
     except KeyboardInterrupt:
         print("\nStopping local AXM capability lab.")
     finally:
+        state.stress.stop()
         server.server_close()
 
 

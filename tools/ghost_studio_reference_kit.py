@@ -131,21 +131,49 @@ def reference_contract() -> dict[str, Any]:
     }
 
 
+def _image_metadata(data: bytes) -> tuple[str, int, int]:
+    if data.startswith(b"\x89PNG\r\n\x1a\n"):
+        if len(data) < 24 or data[12:16] != b"IHDR":
+            raise TrialError("Blackline Relay reference PNG is truncated")
+        width, height = struct.unpack(">II", data[16:24])
+        return "PNG", width, height
+    if not data.startswith(b"\xff\xd8"):
+        raise TrialError("Blackline Relay reference must be a valid PNG or JPEG image")
+    start_of_frame = {0xC0, 0xC1, 0xC2, 0xC3, 0xC5, 0xC6, 0xC7, 0xC9, 0xCA, 0xCB, 0xCD, 0xCE, 0xCF}
+    offset = 2
+    while offset + 4 <= len(data):
+        if data[offset] != 0xFF:
+            offset += 1
+            continue
+        while offset < len(data) and data[offset] == 0xFF:
+            offset += 1
+        if offset >= len(data):
+            break
+        marker = data[offset]
+        offset += 1
+        if marker in {0x01, 0xD8, 0xD9}:
+            continue
+        if offset + 2 > len(data):
+            break
+        length = int.from_bytes(data[offset:offset + 2], "big")
+        if length < 2 or offset + length > len(data):
+            break
+        if marker in start_of_frame:
+            if length < 7:
+                break
+            height = int.from_bytes(data[offset + 3:offset + 5], "big")
+            width = int.from_bytes(data[offset + 5:offset + 7], "big")
+            return "JPEG", width, height
+        offset += length
+    raise TrialError("Blackline Relay reference JPEG has no valid size frame")
+
+
 def validate_reference(path: str | Path) -> dict[str, Any]:
     source = Path(path).resolve()
     if source.is_symlink() or not source.is_file():
         raise TrialError("reference must be one real image file")
     data = source.read_bytes()
-    try:
-        from PIL import Image
-        with Image.open(source) as image:
-            image_format = image.format
-            width, height = image.size
-            image.verify()
-    except Exception as exc:
-        raise TrialError("Blackline Relay reference must be a valid PNG or JPEG image") from exc
-    if image_format not in {"PNG", "JPEG"}:
-        raise TrialError("Blackline Relay reference must be a PNG or JPEG image")
+    image_format, width, height = _image_metadata(data)
     if width < 800 or height < 500:
         raise TrialError("reference image is too small to bind as the supplied direction sheet")
     return {

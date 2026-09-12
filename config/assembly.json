@@ -20,5 +20,7 @@
   "output": {
     "layout": "namespaced-modules",
     "strip_nested_git": true
-  }
+  },
+  "build_enabled": false,
+  "hold_reason": "Do not capture current mains yet; first merge/reconcile the current growth batch, then explicitly enable assembly for the chosen snapshot moment."
 }

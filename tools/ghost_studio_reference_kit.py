@@ -686,6 +686,21 @@ def run(build: str | Path, reference: str | Path, output: str | Path, *, seed: i
 
         _contact_sheet(contact_previews, stage / "CONTACT_SHEET.png")
         (stage / "OPEN_KIT.html").write_text(_gallery(assets), encoding="utf-8")
+        (stage / "START_HERE.md").write_text(
+            "# Blackline Relay modular 3D kit\n\n"
+            "Open `OPEN_KIT.html` for the visual gallery. Game-ready candidate GLBs live under "
+            "`assets/<asset-name>/delivery/`; matching collision GLBs live under "
+            "`assets/<asset-name>/collision/`; editable OBJ/MTL sources live under "
+            "`assets/<asset-name>/source/`.\n\n"
+            "`relay_online` and `relay_offline` are separate state deliveries. "
+            "`conduit_segment_off` is the additional offline state variant. Dimensions use meters "
+            "and origins are at base center.\n\n"
+            "Read `KIT_RECEIPT.json` for hashes and structural checks, and `KIT_SPEC.json` for the "
+            "bound reference interpretation. Import/review deliberately: these files are not "
+            "automatically installed into Ghost Studio and do not inherit gameplay, collision-fit, "
+            "performance, art-approval, merge, or canon authority.\n",
+            encoding="utf-8",
+        )
         files = [{"path": path.relative_to(stage).as_posix(), "bytes": path.stat().st_size, "sha256": _sha256_file(path)} for path in sorted(stage.rglob("*")) if path.is_file() and path.name != "KIT_RECEIPT.json"]
         receipt = {
             "schema": SCHEMA,

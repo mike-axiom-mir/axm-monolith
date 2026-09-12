@@ -6,4 +6,4 @@ if ! command -v "$PYTHON_BIN" >/dev/null 2>&1; then
   echo "Python 3.11+ was not found. Set PYTHON_BIN to your Python executable." >&2
   exit 1
 fi
-exec "$PYTHON_BIN" tools/test_drive.py
+exec "$PYTHON_BIN" tools/test_week_plus.py

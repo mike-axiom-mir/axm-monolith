@@ -2,8 +2,8 @@
 """Generate newbie-friendly one-click launchers inside a materialized AXM snapshot.
 
 The launchers start the local-only snapshot server and open OPEN_ME.html, which is the
-Capability Lab/front door for the whole captured stack. They do not eagerly execute every
-module runtime; capabilities remain dormant/on-demand unless the user or machine selects them.
+Capability Lab/front door for the whole captured stack. Normal launch remains on-demand.
+A separate explicit Activate All switch is installed for deliberate RAM/runtime stress tests.
 """
 
 from __future__ import annotations
@@ -12,10 +12,27 @@ from pathlib import Path
 import shutil
 from typing import Any
 
+import stress_all
+
 SERVER_NAME = "AXM_LOCAL_SERVER.py"
+STRESS_RUNTIME_NAME = "AXM_STRESS_ALL.py"
 WINDOWS_LAUNCHER = "START_AXM.cmd"
 UNIX_LAUNCHER = "START_AXM.sh"
 START_NOTE = "START_HERE.txt"
+
+
+def _inject_stress_link(snapshot: Path) -> None:
+    path = snapshot / "OPEN_ME.html"
+    text = path.read_text(encoding="utf-8", errors="replace")
+    marker = "AXM_STRESS_ALL_LINK_V0_1"
+    if marker in text:
+        return
+    widget = '''<div id="AXM_STRESS_ALL_LINK_V0_1" style="position:fixed;right:16px;bottom:16px;z-index:99999"><a href="STRESS_ALL.html" style="display:block;padding:10px 14px;background:#17100b;border:1px solid #7c5d2f;border-radius:999px;color:#ffd58b;text-decoration:none;font:600 13px system-ui">⚡ Activate All / RAM Stress</a></div>'''
+    if "</body>" in text:
+        text = text.replace("</body>", widget + "</body>", 1)
+    else:
+        text += widget
+    path.write_text(text, encoding="utf-8")
 
 
 def install_snapshot_launchers(snapshot: Path) -> dict[str, Any]:
@@ -23,12 +40,21 @@ def install_snapshot_launchers(snapshot: Path) -> dict[str, Any]:
     if not (snapshot / "OPEN_ME.html").exists():
         raise ValueError(f"missing Capability Lab: {snapshot / 'OPEN_ME.html'}")
 
-    source_server = Path(__file__).resolve().parent / "serve_snapshot.py"
+    tools_dir = Path(__file__).resolve().parent
+    source_server = tools_dir / "serve_snapshot.py"
+    source_stress = tools_dir / "stress_all.py"
     if not source_server.exists():
         raise ValueError(f"missing local snapshot server: {source_server}")
+    if not source_stress.exists():
+        raise ValueError(f"missing activate-all controller: {source_stress}")
 
-    target_server = snapshot / SERVER_NAME
-    shutil.copy2(source_server, target_server)
+    shutil.copy2(source_server, snapshot / SERVER_NAME)
+    shutil.copy2(source_stress, snapshot / STRESS_RUNTIME_NAME)
+
+    # Generated server imports stress_all; keep that stable import beside it.
+    shutil.copy2(source_stress, snapshot / "stress_all.py")
+    stress_controls = stress_all.install_stress_controls(snapshot)
+    _inject_stress_link(snapshot)
 
     windows = r'''@echo off
 setlocal
@@ -103,9 +129,34 @@ This opens one local AXM front door for the ENTIRE captured public-stack snapsho
 The Capability Lab contains the stack map, capabilities, launchable user-facing surfaces,
 AI-native keyboard/input testing, and visual-state evidence tools.
 
-It intentionally does NOT start every module process at once. Modules/capabilities are
-activated on demand from the front door. This avoids wasting resources and avoids pretending
-that every independently evolved runtime is already safe to execute together.
+NORMAL MODE
+===========
+Normal launch intentionally keeps modules/capabilities dormant until they are used. This is
+the newbie-friendly and resource-efficient mode.
+
+ACTIVATE ALL / RAM STRESS
+=========================
+For a deliberate full-pressure experiment, open:
+
+    STRESS_ALL.html
+
+or on Windows use:
+
+    STRESS_ALL_ON.cmd
+    STRESS_ALL_OFF.cmd
+
+The stress page is a real ON/OFF switch. ON loads every captured browser surface concurrently
+and starts every structurally runnable APPLICATION entrypoint with a bounded adapter. OFF
+terminates the process trees started by the switch and unloads the browser pool.
+
+It records whole-machine RAM used, baseline-to-current delta, and peak delta under:
+
+    evidence/stress-all/
+
+Tests, build scripts, lint/check commands, and unknown shell commands are NOT included in
+Activate All. If free physical RAM falls below the emergency reserve (256 MiB or 2%), the
+stress controller automatically switches spawned runtimes OFF so the machine has a chance to
+remain recoverable.
 
 LOCAL ONLY
 ==========
@@ -115,6 +166,8 @@ TRUTH BOUNDARY
 ==============
 "Present in the monolith" does not mean "verified compatible". The interface preserves the
 snapshot's evidence labels, unknowns, candidate connections, and human/machine test results.
+RAM stress numbers are whole-system pressure relative to the pre-ON baseline, so other running
+programs can contribute to the measured delta.
 '''
     (snapshot / START_NOTE).write_text(note, encoding="utf-8")
 
@@ -123,8 +176,10 @@ snapshot's evidence labels, unknowns, candidate connections, and human/machine t
         "windows": WINDOWS_LAUNCHER,
         "unix": UNIX_LAUNCHER,
         "server": SERVER_NAME,
+        "stress_runtime": STRESS_RUNTIME_NAME,
         "start_here": START_NOTE,
         "default_url": "http://127.0.0.1:8765/OPEN_ME.html",
         "launch_model": "one front door; modules and capabilities activate on demand",
+        "stress_controls": stress_controls,
         "network_boundary": "127.0.0.1 only by default",
     }

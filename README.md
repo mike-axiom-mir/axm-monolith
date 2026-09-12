@@ -16,6 +16,8 @@ The first real assembly remains intentionally deferred until the current growth 
 
 Pipeline Fabric is a post-analysis capability. It consumes an existing `STACK_ANALYSIS.json` and exports a capability-level graph, bounded candidate pipelines, goal queries, and explicit gap/adapter leads for this exact snapshot. It does not execute pipelines or create authority.
 
+The monolith can also export its **real checked-in assembly-control state** into AXM Machine Voice's strict notice snapshot format without releasing the assembly hold. The first rule reports only that an explicit assembly hold is active; it does not label that state good, bad, important, anomalous, or failed. See [`MACHINE_VOICE_BRIDGE.md`](MACHINE_VOICE_BRIDGE.md).
+
 ## Source boundary
 
 The default source set is intentionally simple:
@@ -42,6 +44,7 @@ plan       -> read-only exact default-branch SHA plan
 build      -> explicit materialization + automatic offline stack analysis
 inspect    -> re-analyze an already materialized build without touching GitHub
 pipeline   -> derive/query reusable capability-level pipeline possibilities from analysis
+voice      -> export explicit monolith state into a strict Machine Voice snapshot
 ```
 
 Nothing runs automatically.
@@ -197,6 +200,15 @@ Ask where the current stack has missing providers, unused outputs, or possible a
 python tools/pipeline_fabric.py gaps ../axm-monolith-builds/<label>
 ```
 
+Export the current checked-in assembly-control state as a strict Machine Voice notice snapshot:
+
+```bash
+python tools/export_machine_voice_state.py \
+  --output build/MACHINE_VOICE_NOTICE.json
+```
+
+When both repositories are present locally, [`MACHINE_VOICE_BRIDGE.md`](MACHINE_VOICE_BRIDGE.md) gives the exact command that feeds this snapshot into the real Machine Voice runtime. Monolith CI tests the real checked-in export state but intentionally does not claim that cross-repository runtime step is verified yet.
+
 Other projects may consume these exported files later, but they must preserve the evidence labels. A route is not permission, and possibility is not execution.
 
 ## Truth boundary
@@ -213,6 +225,7 @@ It does **not** mean:
 - lexical adapter suggestions are semantically compatible;
 - arbitrary discovered tests are safe to auto-run;
 - an untested composition is safe;
+- a Machine Voice snapshot export proves cross-repository runtime composition;
 - a module's claims become stronger merely because it is inside the monolith.
 
 Those are exactly the questions The Assembly exists to make visible and testable.
@@ -225,10 +238,12 @@ Future builders should read:
 2. [`MONOLITH_BOUNDARY.md`](MONOLITH_BOUNDARY.md)
 3. [`CAPABILITY_MODEL.md`](CAPABILITY_MODEL.md)
 4. [`PIPELINE_FABRIC.md`](PIPELINE_FABRIC.md)
-5. [`config/assembly.json`](config/assembly.json)
-6. [`tools/assemble.py`](tools/assemble.py)
-7. [`tools/inspect_stack.py`](tools/inspect_stack.py)
-8. [`tools/pipeline_fabric.py`](tools/pipeline_fabric.py)
-9. [`NEXT_BUILD.md`](NEXT_BUILD.md)
+5. [`MACHINE_VOICE_BRIDGE.md`](MACHINE_VOICE_BRIDGE.md)
+6. [`config/assembly.json`](config/assembly.json)
+7. [`tools/assemble.py`](tools/assemble.py)
+8. [`tools/inspect_stack.py`](tools/inspect_stack.py)
+9. [`tools/pipeline_fabric.py`](tools/pipeline_fabric.py)
+10. [`tools/export_machine_voice_state.py`](tools/export_machine_voice_state.py)
+11. [`NEXT_BUILD.md`](NEXT_BUILD.md)
 
 The first real snapshot still comes **after** the growth merge batch. Until then, build capability stays hard-disabled.

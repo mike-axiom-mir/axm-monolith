@@ -22,6 +22,28 @@
         "discovery",
         "composition"
       ]
+    },
+    {
+      "accepts": [
+        "assembly.config"
+      ],
+      "description": "Export explicit checked-in Monolith assembly-control state as a strict AXM Machine Voice notice snapshot. The first rule surfaces only an explicit build hold and assigns no importance, anomaly, failure, recommendation, or other interpretation.",
+      "evidence": {
+        "status": "checked_in_state_tested_not_cross_repository_runtime_verified"
+      },
+      "id": "communication.machine-voice-state-export",
+      "provides": [
+        "communication.notice-snapshot",
+        "state.snapshot"
+      ],
+      "tags": [
+        "monolith",
+        "communication",
+        "machine-voice",
+        "state",
+        "bridge",
+        "evidence"
+      ]
     }
   ],
   "entrypoints": [
@@ -34,18 +56,27 @@
       "command": "python tools/pipeline_fabric.py goal <build-dir> <goal-token>",
       "kind": "python-cli",
       "path": "tools/pipeline_fabric.py"
+    },
+    {
+      "command": "python tools/export_machine_voice_state.py --output <snapshot.json>",
+      "kind": "python-cli",
+      "path": "tools/export_machine_voice_state.py"
     }
   ],
   "module": {
     "name": "axm-monolith",
-    "purpose": "On-demand assembly, inspection, capability/pipeline discovery, and bounded testing of the public AXM stack without erasing source identity."
+    "purpose": "On-demand assembly, inspection, capability/pipeline discovery, bounded testing, and explicit state handoff for the public AXM stack without erasing source identity."
   },
   "schema_version": "0.1",
   "tests": [
     {
       "command": "python -m unittest tests.test_pipeline_fabric -v",
       "evidence": "fixture"
+    },
+    {
+      "command": "python -m unittest tests.test_machine_voice_state_export -v",
+      "evidence": "checked-in config/assembly.json plus bounded fixtures"
     }
   ],
-  "truth_boundary": "Pipeline discovery is candidate evidence only. This manifest grants no automatic execution, merge, CANON, installation, device, or network authority."
+  "truth_boundary": "Pipeline discovery is candidate evidence only. Machine Voice export is a state-contract handoff only and is not cross-repository runtime verification. This manifest grants no automatic execution, merge, CANON, installation, device, network, or assembly authority."
 }

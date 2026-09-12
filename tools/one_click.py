@@ -12,7 +12,7 @@ from pathlib import Path
 import shutil
 from typing import Any
 
-import stress_all
+import stress_all_v2 as stress_all
 
 SERVER_NAME = "AXM_LOCAL_SERVER.py"
 STRESS_RUNTIME_NAME = "AXM_STRESS_ALL.py"
@@ -42,17 +42,20 @@ def install_snapshot_launchers(snapshot: Path) -> dict[str, Any]:
 
     tools_dir = Path(__file__).resolve().parent
     source_server = tools_dir / "serve_snapshot.py"
-    source_stress = tools_dir / "stress_all.py"
+    source_stress_base = tools_dir / "stress_all.py"
+    source_stress_adaptive = tools_dir / "stress_all_v2.py"
     if not source_server.exists():
         raise ValueError(f"missing local snapshot server: {source_server}")
-    if not source_stress.exists():
-        raise ValueError(f"missing activate-all controller: {source_stress}")
+    if not source_stress_base.exists():
+        raise ValueError(f"missing base activate-all controller: {source_stress_base}")
+    if not source_stress_adaptive.exists():
+        raise ValueError(f"missing adaptive activate-all controller: {source_stress_adaptive}")
 
     shutil.copy2(source_server, snapshot / SERVER_NAME)
-    shutil.copy2(source_stress, snapshot / STRESS_RUNTIME_NAME)
+    shutil.copy2(source_stress_base, snapshot / "stress_all.py")
+    shutil.copy2(source_stress_adaptive, snapshot / "stress_all_v2.py")
+    shutil.copy2(source_stress_adaptive, snapshot / STRESS_RUNTIME_NAME)
 
-    # Generated server imports stress_all; keep that stable import beside it.
-    shutil.copy2(source_stress, snapshot / "stress_all.py")
     stress_controls = stress_all.install_stress_controls(snapshot)
     _inject_stress_link(snapshot)
 
@@ -149,14 +152,35 @@ The stress page is a real ON/OFF switch. ON loads every captured browser surface
 and starts every structurally runnable APPLICATION entrypoint with a bounded adapter. OFF
 terminates the process trees started by the switch and unloads the browser pool.
 
-It records whole-machine RAM used, baseline-to-current delta, and peak delta under:
+It records whole-machine RAM used, baseline-to-current delta, peak pressure and adaptive
+shedding evidence under:
 
     evidence/stress-all/
 
+ADAPTIVE RAM PRESSURE
+=====================
+The stress test is allowed to reach 98% physical RAM used so we can learn where the stack
+actually becomes expensive. At that point it does NOT immediately throw the whole stress run
+away.
+
+Instead it first records the pressure trigger and the planned shedding order, then tries to
+recover toward 90% RAM used:
+
+    1. unload browser surfaces newest-first;
+    2. if pressure is still above target, stop stress-spawned application runtimes newest-first;
+    3. stop shedding when RAM is at or below 90% used.
+
+Every shed item records what was turned off, why, order, and memory observations in:
+
+    evidence/stress-all/SHED_HISTORY.json
+    evidence/stress-all/EVENTS.jsonl
+
+This should teach us which pieces disappear first under pressure and how much headroom each
+step returns. A much deeper last-resort cutoff remains only if adaptive recovery cannot react
+quickly enough.
+
 Tests, build scripts, lint/check commands, and unknown shell commands are NOT included in
-Activate All. If free physical RAM falls below the emergency reserve (256 MiB or 2%), the
-stress controller automatically switches spawned runtimes OFF so the machine has a chance to
-remain recoverable.
+Activate All.
 
 LOCAL ONLY
 ==========
@@ -167,7 +191,7 @@ TRUTH BOUNDARY
 "Present in the monolith" does not mean "verified compatible". The interface preserves the
 snapshot's evidence labels, unknowns, candidate connections, and human/machine test results.
 RAM stress numbers are whole-system pressure relative to the pre-ON baseline, so other running
-programs can contribute to the measured delta.
+programs can contribute to both the trigger and the measured recovery.
 '''
     (snapshot / START_NOTE).write_text(note, encoding="utf-8")
 
@@ -181,5 +205,10 @@ programs can contribute to the measured delta.
         "default_url": "http://127.0.0.1:8765/OPEN_ME.html",
         "launch_model": "one front door; modules and capabilities activate on demand",
         "stress_controls": stress_controls,
+        "adaptive_ram_policy": {
+            "trigger_used_percent": 98,
+            "target_used_percent": 90,
+            "shed_log": "evidence/stress-all/SHED_HISTORY.json",
+        },
         "network_boundary": "127.0.0.1 only by default",
     }

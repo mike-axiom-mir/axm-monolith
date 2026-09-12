@@ -250,6 +250,8 @@ def materialize_module(module: dict[str, Any], modules_dir: Path, strip_git: boo
 
 
 def build_monolith(config: dict[str, Any], output: Path, confirm: bool) -> dict[str, Any]:
+    if not bool(config.get("build_enabled", False)):
+        raise AssemblyError("build is currently disabled by config hold; finish/reconcile the growth merge batch before enabling it")
     if not confirm:
         raise AssemblyError("build is inert by default; pass --confirm-build to materialize a monolith")
 

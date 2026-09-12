@@ -8,24 +8,65 @@ This repository is an integration/test surface, not a new home for the individua
 
 Create a reproducible on-demand snapshot of the current **public AXM repository stack** so a human or machine can inspect and test the whole accumulated system from one place.
 
-The Assembly must preserve source identity.
+The Assembly must preserve source identity while making the combined capability surface understandable.
 
-A monolith is allowed to contain many modules. It is not allowed to pretend that separately evolved modules were always one codebase.
+A monolith is allowed to contain many modules. It is not allowed to pretend that separately evolved modules were always one codebase or that co-location proves compatibility.
 
 ## Current hold
 
 **Do not create the first monolith yet.**
 
-The current growth batch still needs to be merged/reconciled. This repository should remain a prepared assembler until an explicit instruction is given to capture the stack.
+The current growth batch still needs to be merged/reconciled. `config/assembly.json` keeps the materializing build path hard-disabled.
 
-Until that instruction:
+Until Mike explicitly releases that hold:
 
+- do not set `build_enabled` to true;
 - do not run `build`;
 - do not commit generated stack lock files;
 - do not vendor current repository mains into this repository;
-- do not infer that the current public heads are the desired first test snapshot.
+- do not infer that today's public heads are the desired first test snapshot.
 
-Read-only inspection of this repository is fine. Changes to the assembler itself should preserve the hold.
+Work on the assembler/inspector itself is allowed if it preserves the hold.
+
+## What is already prepared
+
+Two layers now exist:
+
+### 1. The assembler
+
+`tools/assemble.py`
+
+It can later discover the eligible public repo set, pin exact SHAs, materialize each source under its own namespace, and preserve provenance.
+
+### 2. The capability inspector
+
+`tools/inspect_stack.py`
+
+After materialization it can deterministically inspect the captured modules and generate:
+
+```text
+OPEN_ME.html
+STACK_REPORT.md
+STACK_ANALYSIS.json
+CAPABILITY_REGISTRY.json
+CONNECTION_GRAPH.json
+COMPOSITION_CANDIDATES.json
+HUMAN_TEST_QUEUE.json
+AUTOMATED_TEST_QUEUE.json
+analysis/modules/<repo>.json
+```
+
+The dashboard is intentionally offline and dependency-free.
+
+Capabilities are labelled by evidence source:
+
+- native module declaration;
+- structural file/package detection;
+- bounded inference rule.
+
+Candidate connections and routes are never silently labelled verified.
+
+Read [`CAPABILITY_MODEL.md`](CAPABILITY_MODEL.md) for the detailed truth model.
 
 ## Selection invariant
 
@@ -41,7 +82,7 @@ AND not archived (default)
 
 Private repository visibility must never be used as a convenience shortcut. A GitHub token may improve API limits, but it must not widen the source set.
 
-The assembler deliberately calls the public user-repository endpoint and still re-checks each repository's `private`/`visibility` fields before it becomes eligible.
+The assembler deliberately calls the public user-repository endpoint and re-checks each repository's visibility before eligibility.
 
 ## Explicit exclusion
 
@@ -49,7 +90,7 @@ The assembler deliberately calls the public user-repository endpoint and still r
 
 Reason: its protocols form a protected boundary. It may later cooperate through an explicit interface, but direct source absorption would defeat that separation.
 
-`mike-axiom-mir/axm-monolith` is also always excluded to prevent recursive self-assembly.
+`mike-axiom-mir/axm-monolith` is always excluded to prevent recursive self-assembly.
 
 Future exclusions belong in `config/assembly.json` with an explicit reason.
 
@@ -65,7 +106,26 @@ Every future build must:
 6. keep modules namespaced;
 7. never push changes back to source repositories as part of assembly.
 
-If a repository moves after planning, the build still uses the pinned SHA. That is the point of the lock.
+If a repository moves after planning, the build still uses the pinned SHA.
+
+## Capability integrity
+
+The inspector may describe and compare captured modules, but it must not confuse evidence classes.
+
+A README/name-based capability inference is weaker than structural detection. Structural detection is weaker than a tested composition. A declared native interface is still not automatically a successful runtime integration.
+
+The first monolith should therefore expose:
+
+```text
+what exists
+what is declared
+what is structurally visible
+what is inferred
+what appears connectable
+what has not been tested
+```
+
+rather than flattening those categories into one "works" status.
 
 ## What not to do
 
@@ -74,31 +134,39 @@ Do not:
 - use `/user/repos` or another authenticated-private discovery endpoint;
 - add private repos because the machine can see them;
 - flatten files from multiple repos into one namespace;
-- edit source modules inside a generated build and then quietly treat those edits as canonical upstream changes;
+- edit source modules inside a generated build and quietly treat those edits as upstream truth;
 - interpret assembly success as compatibility success;
+- interpret a graph edge as verified interoperability;
+- auto-execute arbitrary discovered module tests during first assembly;
 - connect the collaboration platform directly to bypass its own protocol boundary;
 - run the first real build before the growth merges are ready.
 
 ## Commands and side effects
 
-`discover` — network read only; prints repository selection to stdout.
+`discover` — network read only; prints repository selection.
 
-`plan` — network read only; additionally resolves exact default-branch SHAs and prints the plan to stdout.
+`plan` — network read only; additionally resolves exact default-branch SHAs.
 
-`build` — writes only to the explicitly supplied output directory. It requires `--confirm-build` and refuses a non-empty output directory. It does not modify source repos.
+`build` — only after the config hold is released; writes to the supplied empty output directory, materializes the pinned public stack, then runs offline capability analysis.
+
+`inspect` — offline; re-analyzes an already materialized build.
+
+`tools/inspect_stack.py query` — offline; searches the generated capability surface.
+
+`tools/inspect_stack.py route` — offline; finds a candidate graph route and labels it unverified.
 
 ## First real experiment, later
 
-When the hold is explicitly released:
+When Mike explicitly releases the hold:
 
 1. run `discover` and inspect exclusions/rejections;
 2. run `plan` and preserve the output for review;
-3. only then run `build --confirm-build`;
-4. inventory what actually assembled;
-5. test modules individually first;
-6. map duplicate concepts, incompatible interfaces, and missing connectors;
-7. test combinations without upgrading evidence beyond what was actually observed;
-8. feed repairs back to the owning source repos rather than silently forking them in the generated monolith.
+3. run `build --confirm-build` only on the chosen moment;
+4. open `OPEN_ME.html`;
+5. inspect the full capability/evidence/connection surface;
+6. use the human-test queue instead of manually hunting across every repo;
+7. test selected candidate compositions;
+8. feed real repairs back to the owning source repos rather than silently forking them in the monolith.
 
 ## Constitutional boundary
 
@@ -109,4 +177,4 @@ Inside AXM, the four roots remain the constitutional merge gate:
 - Continuity
 - Wisdom before speed
 
-The Assembly does not gain authority over source projects merely because it can place their files next to each other.
+The Assembly does not gain authority over source projects merely because it can place their files and capability descriptions next to one another.

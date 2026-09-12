@@ -10,9 +10,11 @@ Its job is **not** to become another development home and it is **not** allowed 
 
 ## Current status
 
-**Assembler + deterministic capability inspector are ready. No monolith snapshot has been created yet.**
+**Assembler + deterministic capability inspector + reusable Pipeline Fabric are ready. No monolith snapshot has been created yet.**
 
 The first real assembly remains intentionally deferred until the current growth work has been reviewed/merged. `config/assembly.json` keeps `build_enabled` set to `false`, so even an explicit `--confirm-build` is rejected until the hold is deliberately released.
+
+Pipeline Fabric is a post-analysis capability. It consumes an existing `STACK_ANALYSIS.json` and exports a capability-level graph, bounded candidate pipelines, goal queries, and explicit gap/adapter leads for this exact snapshot. It does not execute pipelines or create authority.
 
 ## Source boundary
 
@@ -39,6 +41,7 @@ discover   -> read-only list of eligible and rejected repositories
 plan       -> read-only exact default-branch SHA plan
 build      -> explicit materialization + automatic offline stack analysis
 inspect    -> re-analyze an already materialized build without touching GitHub
+pipeline   -> derive/query reusable capability-level pipeline possibilities from analysis
 ```
 
 Nothing runs automatically.
@@ -80,7 +83,16 @@ analysis/modules/<repo>.json
 modules/<repo>/...
 ```
 
-So the first thing Mike needs to do after assembly is simply open `OPEN_ME.html`.
+Pipeline Fabric can then add portable post-analysis outputs:
+
+```text
+PIPELINE_FABRIC.json
+PIPELINE_GRAPH.json
+PIPELINE_CANDIDATES.json
+PIPELINE_GAPS.json
+```
+
+So the first thing Mike needs to do after assembly is simply open `OPEN_ME.html`. Machines or later AXM systems can consume the machine-readable registry/graph/pipeline files directly.
 
 ## Capability truth model
 
@@ -104,7 +116,9 @@ inferred_candidate_not_tested
 
 The Assembly never upgrades a candidate connection to `VERIFIED` merely because two repos were placed next to each other.
 
-See [`CAPABILITY_MODEL.md`](CAPABILITY_MODEL.md).
+Pipeline Fabric carries that same rule through an entire route: a pipeline inherits the weakest evidence class of its edges and remains unexecuted until a separate composition experiment proves more.
+
+See [`CAPABILITY_MODEL.md`](CAPABILITY_MODEL.md) and [`PIPELINE_FABRIC.md`](PIPELINE_FABRIC.md).
 
 ## Namespacing
 
@@ -165,6 +179,26 @@ python tools/inspect_stack.py route ../axm-monolith-builds/<label> axm-universal
 
 Routes remain `candidate_route_not_verified` until exercised.
 
+Export the deeper capability-level pipeline fabric:
+
+```bash
+python tools/pipeline_fabric.py export ../axm-monolith-builds/<label>
+```
+
+Ask what candidate pipelines could end in a particular output token:
+
+```bash
+python tools/pipeline_fabric.py goal ../axm-monolith-builds/<label> artifact.game-build
+```
+
+Ask where the current stack has missing providers, unused outputs, or possible adapter seams:
+
+```bash
+python tools/pipeline_fabric.py gaps ../axm-monolith-builds/<label>
+```
+
+Other projects may consume these exported files later, but they must preserve the evidence labels. A route is not permission, and possibility is not execution.
+
 ## Truth boundary
 
 A successful assembly means the selected public repos were pinned, materialized, and inspected reproducibly.
@@ -175,6 +209,8 @@ It does **not** mean:
 - duplicated concepts are equivalent;
 - inferred capabilities are proven;
 - candidate graph edges are verified;
+- candidate pipelines are executable or safe merely because a path exists;
+- lexical adapter suggestions are semantically compatible;
 - arbitrary discovered tests are safe to auto-run;
 - an untested composition is safe;
 - a module's claims become stronger merely because it is inside the monolith.
@@ -188,9 +224,11 @@ Future builders should read:
 1. [`START_HERE.md`](START_HERE.md)
 2. [`MONOLITH_BOUNDARY.md`](MONOLITH_BOUNDARY.md)
 3. [`CAPABILITY_MODEL.md`](CAPABILITY_MODEL.md)
-4. [`config/assembly.json`](config/assembly.json)
-5. [`tools/assemble.py`](tools/assemble.py)
-6. [`tools/inspect_stack.py`](tools/inspect_stack.py)
-7. [`NEXT_BUILD.md`](NEXT_BUILD.md)
+4. [`PIPELINE_FABRIC.md`](PIPELINE_FABRIC.md)
+5. [`config/assembly.json`](config/assembly.json)
+6. [`tools/assemble.py`](tools/assemble.py)
+7. [`tools/inspect_stack.py`](tools/inspect_stack.py)
+8. [`tools/pipeline_fabric.py`](tools/pipeline_fabric.py)
+9. [`NEXT_BUILD.md`](NEXT_BUILD.md)
 
 The first real snapshot still comes **after** the growth merge batch. Until then, build capability stays hard-disabled.

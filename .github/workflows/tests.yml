@@ -1,0 +1,22 @@
+name: Assembly unit tests
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  boundary-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Run boundary tests
+        run: python -m unittest discover -s tests -v
+
+# Deliberately no discover/plan/build command here.
+# CI tests the assembler boundary but never captures repository mains.

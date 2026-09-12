@@ -156,7 +156,7 @@ The one-command runner is only orchestration around this same public boundary; i
 
 ## What repository CI proves
 
-CI still does **not** fetch or copy the real Machine Voice repository.
+CI still does **not** fetch or copy the real Machine Voice repository. This path is **not yet claimed cross-repository verified** by repository CI alone.
 
 It proves two bounded things:
 

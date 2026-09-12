@@ -1,0 +1,82 @@
+{
+  "authority": {
+    "canon": false,
+    "execution": false,
+    "merge": false,
+    "promotion": false
+  },
+  "bound": 3,
+  "claim": "Runtime authority must be a subset of baseline authority plus explicit grants.",
+  "invariant": "INV-01-no-silent-authority-escalation",
+  "limitations": [
+    "abstract single actor",
+    "authority is a small string set, not a real permission system",
+    "fault transition is synthetic and is not a claim about a donor repository",
+    "This is a synthetic fault-injection counterexample, not a claim of a donor-repository defect."
+  ],
+  "model": "no_silent_authority",
+  "schema": "axm.invariant-lab.counterexample/v0.1",
+  "status": "FAIL",
+  "trace": [
+    {
+      "after": {
+        "actor": "worker",
+        "authority": [
+          "observe"
+        ],
+        "baselineAuthority": [
+          "observe"
+        ],
+        "candidate": {
+          "capability": "write",
+          "stage": "tested"
+        },
+        "explicitGrants": []
+      },
+      "before": {
+        "actor": "worker",
+        "authority": [
+          "observe"
+        ],
+        "baselineAuthority": [
+          "observe"
+        ],
+        "candidate": null,
+        "explicitGrants": []
+      },
+      "transition": "propose-write-candidate"
+    },
+    {
+      "after": {
+        "actor": "worker",
+        "authority": [
+          "observe",
+          "write"
+        ],
+        "baselineAuthority": [
+          "observe"
+        ],
+        "candidate": {
+          "capability": "write",
+          "stage": "tested"
+        },
+        "explicitGrants": []
+      },
+      "before": {
+        "actor": "worker",
+        "authority": [
+          "observe"
+        ],
+        "baselineAuthority": [
+          "observe"
+        ],
+        "candidate": {
+          "capability": "write",
+          "stage": "tested"
+        },
+        "explicitGrants": []
+      },
+      "transition": "FAULT-inherit-candidate-authority"
+    }
+  ]
+}

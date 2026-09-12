@@ -44,6 +44,28 @@
         "bridge",
         "evidence"
       ]
+    },
+    {
+      "accepts": [
+        "packet.counterexample"
+      ],
+      "description": "Consume an exact AXM Invariant Lab counterexample v0.1 packet as external bounded evidence while preserving FAIL/HOLD, rejecting authority escalation, and leaving Monolith pipeline status unchanged.",
+      "evidence": {
+        "status": "exact_donor_packet_fixture_tested",
+        "boundary": "one external consumer of a pinned synthetic Invariant Lab packet; no donor-runtime proof and no pipeline verification/adoption authority"
+      },
+      "id": "evidence.invariant-lab-consumer",
+      "provides": [
+        "evidence.external-invariant",
+        "evidence.counterexample-summary"
+      ],
+      "tags": [
+        "monolith",
+        "invariant",
+        "evidence",
+        "consumer",
+        "counterexample"
+      ]
     }
   ],
   "entrypoints": [
@@ -61,11 +83,16 @@
       "command": "python tools/export_machine_voice_state.py --output <snapshot.json>",
       "kind": "python-cli",
       "path": "tools/export_machine_voice_state.py"
+    },
+    {
+      "command": "python tools/import_invariant_packet.py <counterexample.json>",
+      "kind": "python-cli",
+      "path": "tools/import_invariant_packet.py"
     }
   ],
   "module": {
     "name": "axm-monolith",
-    "purpose": "On-demand assembly, inspection, capability/pipeline discovery, bounded testing, and explicit state handoff for the public AXM stack without erasing source identity."
+    "purpose": "On-demand assembly, inspection, capability/pipeline discovery, bounded testing, explicit state handoff, and read-only external evidence consumption for the public AXM stack without erasing source identity."
   },
   "schema_version": "0.1",
   "tests": [
@@ -76,7 +103,11 @@
     {
       "command": "python -m unittest tests.test_machine_voice_state_export -v",
       "evidence": "checked-in config/assembly.json plus bounded fixtures"
+    },
+    {
+      "command": "python -m unittest tests.test_invariant_evidence_consumer -v",
+      "evidence": "exact pinned AXM Invariant Lab counterexample v0.1 fixture"
     }
   ],
-  "truth_boundary": "Pipeline discovery is candidate evidence only. Machine Voice export is a state-contract handoff only and is not cross-repository runtime verification. This manifest grants no automatic execution, merge, CANON, installation, device, network, or assembly authority."
+  "truth_boundary": "Pipeline discovery is candidate evidence only. Machine Voice export is a state-contract handoff only and is not cross-repository runtime verification. Invariant Lab packet import preserves external FAIL/HOLD evidence but does not prove Monolith behavior, verify or invalidate a pipeline, or grant authority. This manifest grants no automatic execution, merge, CANON, installation, device, network, or assembly authority."
 }

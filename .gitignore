@@ -1,0 +1,15 @@
+# Generated monoliths are build outputs, not source for this assembler.
+builds/
+monolith-builds/
+.generated/
+
+# Plans/locks belong inside explicit generated outputs unless intentionally reviewed.
+first-plan.json
+axm-stack.lock.json
+MONOLITH_MANIFEST.json
+INVENTORY.md
+
+# Local Python noise.
+__pycache__/
+*.pyc
+.venv/

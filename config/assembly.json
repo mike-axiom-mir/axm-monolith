@@ -1,0 +1,24 @@
+{
+  "schema_version": "0.1",
+  "owner": "mike-axiom-mir",
+  "selection": {
+    "visibility": "public-only",
+    "include_forks": false,
+    "include_archived": false,
+    "mode": "all-public-owner-repositories"
+  },
+  "excluded_repositories": [
+    {
+      "repository": "mike-axiom-mir/axm-collaboration-platform",
+      "reason": "protected collaboration-platform protocol boundary; it may be called later through an explicit interface but must not be directly absorbed into the monolith"
+    },
+    {
+      "repository": "mike-axiom-mir/axm-monolith",
+      "reason": "assembler repository; recursive self-inclusion is forbidden"
+    }
+  ],
+  "output": {
+    "layout": "namespaced-modules",
+    "strip_nested_git": true
+  }
+}

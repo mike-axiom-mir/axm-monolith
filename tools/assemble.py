@@ -5,6 +5,10 @@ This tool is intentionally inert until a human or machine explicitly runs a comm
 It discovers only PUBLIC repositories owned by the configured AXM owner, applies an
 explicit exclusion list, pins exact default-branch commit SHAs, and can materialize a
 namespaced full-stack snapshot without modifying any source repository.
+
+When a build is finally enabled, the materialized stack is automatically passed to the
+local deterministic stack inspector so the output contains an offline capability map,
+candidate connection graph, human-test queue, and OPEN_ME.html dashboard.
 """
 
 from __future__ import annotations
@@ -23,7 +27,7 @@ import urllib.request
 from typing import Any, Callable, Iterable
 
 API_ROOT = "https://api.github.com"
-USER_AGENT = "axm-monolith/0.1"
+USER_AGENT = "axm-monolith/0.2"
 SELF_REPO = "mike-axiom-mir/axm-monolith"
 
 
@@ -113,24 +117,17 @@ def filter_repositories(
         clone_url = str(repo.get("clone_url", ""))
         default_branch = str(repo.get("default_branch", ""))
         if not clone_url.startswith("https://github.com/") or not default_branch:
-            rejected.append(
-                {
-                    "repository": full_name,
-                    "reason": "missing safe public HTTPS clone URL or default branch",
-                }
-            )
+            rejected.append({"repository": full_name, "reason": "missing safe public HTTPS clone URL or default branch"})
             continue
 
-        eligible.append(
-            {
-                "name": name,
-                "full_name": full_name,
-                "clone_url": clone_url,
-                "default_branch": default_branch,
-                "archived": bool(repo.get("archived", False)),
-                "fork": bool(repo.get("fork", False)),
-            }
-        )
+        eligible.append({
+            "name": name,
+            "full_name": full_name,
+            "clone_url": clone_url,
+            "default_branch": default_branch,
+            "archived": bool(repo.get("archived", False)),
+            "fork": bool(repo.get("fork", False)),
+        })
 
     eligible.sort(key=lambda item: item["full_name"].lower())
     rejected.sort(key=lambda item: item["repository"].lower())
@@ -145,8 +142,7 @@ def discover_public_repositories(
     page = 1
     raw: list[dict[str, Any]] = []
     while True:
-        # /users/{owner}/repos is deliberately used instead of /user/repos so the
-        # discovery surface is public-only even when GITHUB_TOKEN exists.
+        # Public endpoint deliberately prevents a token from widening discovery to private repos.
         url = f"{API_ROOT}/users/{owner}/repos?type=owner&sort=full_name&direction=asc&per_page=100&page={page}"
         payload = getter(url, token)
         if not isinstance(payload, list):
@@ -175,7 +171,7 @@ def resolve_plan(
         modules.append({**repo, "commit": sha})
 
     return {
-        "schema_version": "0.1",
+        "schema_version": "0.2",
         "owner": config["owner"],
         "selection": config["selection"],
         "generated_at_utc": dt.datetime.now(dt.timezone.utc).replace(microsecond=0).isoformat(),
@@ -189,19 +185,13 @@ def resolve_plan(
 def run_git(args: list[str], cwd: Path | None = None) -> str:
     try:
         completed = subprocess.run(
-            ["git", *args],
-            cwd=str(cwd) if cwd else None,
-            check=True,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            text=True,
+            ["git", *args], cwd=str(cwd) if cwd else None, check=True,
+            stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
         )
     except FileNotFoundError as exc:
         raise AssemblyError("git executable not found") from exc
     except subprocess.CalledProcessError as exc:
-        raise AssemblyError(
-            f"git command failed: git {' '.join(args)}\n{exc.stderr.strip()}"
-        ) from exc
+        raise AssemblyError(f"git command failed: git {' '.join(args)}\n{exc.stderr.strip()}") from exc
     return completed.stdout.strip()
 
 
@@ -223,9 +213,7 @@ def materialize_module(module: dict[str, Any], modules_dir: Path, strip_git: boo
     run_git(["checkout", "-q", "--detach", "FETCH_HEAD"], cwd=destination)
     actual = run_git(["rev-parse", "HEAD"], cwd=destination)
     if actual != module["commit"]:
-        raise AssemblyError(
-            f"materialized SHA mismatch for {module['full_name']}: expected {module['commit']}, got {actual}"
-        )
+        raise AssemblyError(f"materialized SHA mismatch for {module['full_name']}: expected {module['commit']}, got {actual}")
 
     source_record = {
         "repository": module["full_name"],
@@ -241,12 +229,18 @@ def materialize_module(module: dict[str, Any], modules_dir: Path, strip_git: boo
     if strip_git:
         shutil.rmtree(destination / ".git")
 
-    return {
-        "repository": module["full_name"],
-        "commit": module["commit"],
-        "path": f"modules/{module['name']}",
-        "materialized": True,
-    }
+    return {"repository": module["full_name"], "commit": module["commit"], "path": f"modules/{module['name']}", "materialized": True}
+
+
+def run_stack_analysis(output: Path) -> dict[str, Any]:
+    try:
+        from inspect_stack import analyze_build
+    except ImportError as exc:
+        raise AssemblyError("stack inspector is missing; tools/inspect_stack.py must be present") from exc
+    try:
+        return analyze_build(output)
+    except (ValueError, OSError, json.JSONDecodeError) as exc:
+        raise AssemblyError(f"stack analysis failed after materialization: {exc}") from exc
 
 
 def build_monolith(config: dict[str, Any], output: Path, confirm: bool) -> dict[str, Any]:
@@ -260,8 +254,7 @@ def build_monolith(config: dict[str, Any], output: Path, confirm: bool) -> dict[
     modules_dir = output / "modules"
     modules_dir.mkdir()
 
-    lock_path = output / "axm-stack.lock.json"
-    with lock_path.open("w", encoding="utf-8") as handle:
+    with (output / "axm-stack.lock.json").open("w", encoding="utf-8") as handle:
         json.dump(plan, handle, indent=2, sort_keys=True)
         handle.write("\n")
 
@@ -270,8 +263,16 @@ def build_monolith(config: dict[str, Any], output: Path, confirm: bool) -> dict[
     for module in plan["modules"]:
         materialized.append(materialize_module(module, modules_dir, strip_git=strip_git))
 
-    manifest = {
-        "schema_version": "0.1",
+    inventory_lines = [
+        "# AXM Monolith Inventory", "", f"Modules: {len(materialized)}", "",
+        "Every module below was public at discovery time and pinned to the exact SHA in `axm-stack.lock.json`.", "",
+    ]
+    inventory_lines.extend(f"- `{item['repository']}` @ `{item['commit']}` → `{item['path']}`" for item in materialized)
+    inventory_lines.extend(["", "No source repository was modified. Repository identities remain namespaced rather than flattened together.", ""])
+    (output / "INVENTORY.md").write_text("\n".join(inventory_lines), encoding="utf-8")
+
+    manifest: dict[str, Any] = {
+        "schema_version": "0.2",
         "created_at_utc": dt.datetime.now(dt.timezone.utc).replace(microsecond=0).isoformat(),
         "source_lock": "axm-stack.lock.json",
         "module_count": len(materialized),
@@ -283,46 +284,32 @@ def build_monolith(config: dict[str, Any], output: Path, confirm: bool) -> dict[
         json.dump(manifest, handle, indent=2, sort_keys=True)
         handle.write("\n")
 
-    inventory_lines = [
-        "# AXM Monolith Inventory",
-        "",
-        f"Modules: {len(materialized)}",
-        "",
-        "Every module below was public at discovery time and pinned to the exact SHA in `axm-stack.lock.json`.",
-        "",
-    ]
-    inventory_lines.extend(
-        f"- `{item['repository']}` @ `{item['commit']}` → `{item['path']}`"
-        for item in materialized
-    )
-    inventory_lines.extend(
-        [
-            "",
-            "No source repository was modified. Repository identities remain namespaced rather than flattened together.",
-            "",
-        ]
-    )
-    (output / "INVENTORY.md").write_text("\n".join(inventory_lines), encoding="utf-8")
+    if bool(config.get("analysis", {}).get("enabled", True)):
+        manifest["analysis"] = run_stack_analysis(output)
+        with (output / "MONOLITH_MANIFEST.json").open("w", encoding="utf-8") as handle:
+            json.dump(manifest, handle, indent=2, sort_keys=True)
+            handle.write("\n")
+
     return manifest
+
+
+def inspect_existing_build(path: Path) -> dict[str, Any]:
+    if not (path / "modules").is_dir():
+        raise AssemblyError(f"missing modules directory in build: {path}")
+    return run_stack_analysis(path)
 
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="AXM on-demand public-stack monolith assembler")
-    parser.add_argument(
-        "--config", default="config/assembly.json", help="path to assembly config (default: config/assembly.json)"
-    )
+    parser.add_argument("--config", default="config/assembly.json", help="path to assembly config (default: config/assembly.json)")
     sub = parser.add_subparsers(dest="command", required=True)
-
     sub.add_parser("discover", help="read-only: print eligible and rejected repositories; resolve no commit pins")
     sub.add_parser("plan", help="read-only: resolve exact public default-branch heads and print a reproducible plan")
-
-    build = sub.add_parser("build", help="materialize an on-demand full-stack snapshot")
+    build = sub.add_parser("build", help="materialize an on-demand full-stack snapshot and analyze it")
     build.add_argument("--output", required=True, help="new or empty output directory")
-    build.add_argument(
-        "--confirm-build",
-        action="store_true",
-        help="required explicit acknowledgement; without it build refuses to create a monolith",
-    )
+    build.add_argument("--confirm-build", action="store_true", help="required explicit acknowledgement; without it build refuses to create a monolith")
+    inspect = sub.add_parser("inspect", help="offline: analyze/re-analyze an already materialized build")
+    inspect.add_argument("--build", required=True, help="existing monolith build directory")
     return parser
 
 
@@ -332,20 +319,16 @@ def main() -> int:
         config = load_config(Path(args.config))
         if args.command == "discover":
             eligible, rejected = discover_public_repositories(config)
-            payload = {
-                "eligible_count": len(eligible),
-                "eligible": eligible,
-                "excluded_or_rejected": rejected,
-                "source_mutation": "none",
-            }
-            print(json.dumps(payload, indent=2, sort_keys=True))
+            print(json.dumps({"eligible_count": len(eligible), "eligible": eligible, "excluded_or_rejected": rejected, "source_mutation": "none"}, indent=2, sort_keys=True))
             return 0
         if args.command == "plan":
             print(json.dumps(resolve_plan(config), indent=2, sort_keys=True))
             return 0
         if args.command == "build":
-            manifest = build_monolith(config, Path(args.output), confirm=args.confirm_build)
-            print(json.dumps(manifest, indent=2, sort_keys=True))
+            print(json.dumps(build_monolith(config, Path(args.output), confirm=args.confirm_build), indent=2, sort_keys=True))
+            return 0
+        if args.command == "inspect":
+            print(json.dumps(inspect_existing_build(Path(args.build)), indent=2, sort_keys=True))
             return 0
         raise AssemblyError(f"unknown command: {args.command}")
     except AssemblyError as exc:

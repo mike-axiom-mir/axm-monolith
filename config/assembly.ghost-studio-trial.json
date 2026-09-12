@@ -1,0 +1,37 @@
+{
+  "schema_version": "0.2",
+  "owner": "mike-axiom-mir",
+  "selection": {
+    "visibility": "public-only",
+    "include_forks": false,
+    "include_archived": false,
+    "mode": "all-public-owner-repositories"
+  },
+  "excluded_repositories": [
+    {
+      "repository": "mike-axiom-mir/axm-collaboration-platform",
+      "reason": "protected collaboration-platform protocol boundary; it may be called later through an explicit interface but must not be directly absorbed into the monolith"
+    },
+    {
+      "repository": "mike-axiom-mir/axm-monolith",
+      "reason": "assembler repository; recursive self-inclusion is forbidden"
+    }
+  ],
+  "output": {
+    "layout": "namespaced-modules",
+    "strip_nested_git": true
+  },
+  "analysis": {
+    "enabled": true,
+    "mode": "deterministic-static-first",
+    "auto_execute_discovered_tests": false,
+    "generate_offline_dashboard": true
+  },
+  "build_enabled": true,
+  "hold_reason": "",
+  "experiment": {
+    "id": "ghost-studio-asset-trial-v0.1",
+    "authorization": "Explicit user request on 2026-09-12 to assemble the current public AXM stack and test it by creating assets for Ghost Studio.",
+    "boundary": "This releases only the named experimental snapshot. It does not change the default assembly hold or source-repository authority."
+  }
+}

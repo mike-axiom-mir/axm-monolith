@@ -109,5 +109,5 @@
       "evidence": "exact pinned AXM Invariant Lab counterexample v0.1 fixture"
     }
   ],
-  "truth_boundary": "Pipeline discovery is candidate evidence only. Machine Voice export is a state-contract handoff only. Invariant Lab packet import preserves external FAIL/HOLD evidence but does not prove Monolith behavior, verify or invalidate a pipeline, or grant authority. This manifest grants no automatic execution, merge, CANON, installation, device, network, or assembly authority."
+  "truth_boundary": "Pipeline discovery is candidate evidence only. Machine Voice export is a state-contract handoff only and is not cross-repository runtime verification. Invariant Lab packet import preserves external FAIL/HOLD evidence but does not prove Monolith behavior, verify or invalidate a pipeline, or grant authority. This manifest grants no automatic execution, merge, CANON, installation, device, network, or assembly authority."
 }

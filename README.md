@@ -16,7 +16,9 @@ The first real assembly remains intentionally deferred until the current growth 
 
 Pipeline Fabric is a post-analysis capability. It consumes an existing `STACK_ANALYSIS.json` and exports a capability-level graph, bounded candidate pipelines, goal queries, and explicit gap/adapter leads for this exact snapshot. It does not execute pipelines or create authority.
 
-The monolith can also export its **real checked-in assembly-control state** into AXM Machine Voice's strict notice snapshot format without releasing the assembly hold. The first rule reports only that an explicit assembly hold is active; it does not label that state good, bad, important, anomalous, or failed. See [`MACHINE_VOICE_BRIDGE.md`](MACHINE_VOICE_BRIDGE.md).
+The monolith can also export its **real checked-in assembly-control state** into AXM Machine Voice's strict notice snapshot format without releasing the assembly hold. The first rule reports only that an explicit assembly hold is active; it does not label that state good, bad, important, anomalous, or failed.
+
+A one-command local composition runner is also ready. When `axm-machine-voice` is physically present as a sibling (or explicitly selected path), it exports the real state, invokes the real Machine Voice zero-install channel, preserves a local communication journal, and writes explicit composition evidence. Repository CI tests that orchestration with a fake external process only; real cross-repository runtime evidence still requires the local/staged command. See [`MACHINE_VOICE_BRIDGE.md`](MACHINE_VOICE_BRIDGE.md).
 
 ## Source boundary
 
@@ -45,6 +47,7 @@ build      -> explicit materialization + automatic offline stack analysis
 inspect    -> re-analyze an already materialized build without touching GitHub
 pipeline   -> derive/query reusable capability-level pipeline possibilities from analysis
 voice      -> export explicit monolith state into a strict Machine Voice snapshot
+voice-test -> locally exercise that snapshot through a real Machine Voice checkout
 ```
 
 Nothing runs automatically.
@@ -204,12 +207,25 @@ Export the current checked-in assembly-control state as a strict Machine Voice n
 
 ```bash
 python tools/export_machine_voice_state.py \
-  --output build/MACHINE_VOICE_NOTICE.json
+  --output .generated/machine-voice-composition/MACHINE_VOICE_NOTICE.json
 ```
 
-When both repositories are present locally, [`MACHINE_VOICE_BRIDGE.md`](MACHINE_VOICE_BRIDGE.md) gives the exact command that feeds this snapshot into the real Machine Voice runtime. Monolith CI tests the real checked-in export state but intentionally does not claim that cross-repository runtime step is verified yet.
+Run the entire local Monolith → Machine Voice composition proof in one command when the sibling `../axm-machine-voice` checkout exists:
 
-Other projects may consume these exported files later, but they must preserve the evidence labels. A route is not permission, and possibility is not execution.
+```bash
+python tools/test_machine_voice_composition.py
+```
+
+For a Machine Voice checkout elsewhere:
+
+```bash
+python tools/test_machine_voice_composition.py \
+  --machine-voice-root /path/to/axm-machine-voice
+```
+
+The default keeps `.generated/machine-voice-composition/MACHINE_VOICE_COMMUNICATION.jsonl`. A first fresh emission reports `verified_fresh_emission`; a later exact repeat may report `verified_duplicate_suppression`, which is also healthy continuity evidence. Use `--reset-journal` only when an explicit fresh-emission proof is wanted.
+
+Other projects may consume exported files later, but they must preserve the evidence labels. A route is not permission, and possibility is not execution.
 
 ## Truth boundary
 
@@ -225,7 +241,9 @@ It does **not** mean:
 - lexical adapter suggestions are semantically compatible;
 - arbitrary discovered tests are safe to auto-run;
 - an untested composition is safe;
-- a Machine Voice snapshot export proves cross-repository runtime composition;
+- a Machine Voice snapshot export alone proves cross-repository runtime composition;
+- a fake-process CI test proves the real Machine Voice sibling runtime works;
+- one successful local Machine Voice bridge verifies unrelated AXM module connections;
 - a module's claims become stronger merely because it is inside the monolith.
 
 Those are exactly the questions The Assembly exists to make visible and testable.
@@ -244,6 +262,7 @@ Future builders should read:
 8. [`tools/inspect_stack.py`](tools/inspect_stack.py)
 9. [`tools/pipeline_fabric.py`](tools/pipeline_fabric.py)
 10. [`tools/export_machine_voice_state.py`](tools/export_machine_voice_state.py)
-11. [`NEXT_BUILD.md`](NEXT_BUILD.md)
+11. [`tools/test_machine_voice_composition.py`](tools/test_machine_voice_composition.py)
+12. [`NEXT_BUILD.md`](NEXT_BUILD.md)
 
 The first real snapshot still comes **after** the growth merge batch. Until then, build capability stays hard-disabled.

@@ -1,5 +1,5 @@
 {
-  "schema_version": "0.1",
+  "schema_version": "0.2",
   "owner": "mike-axiom-mir",
   "selection": {
     "visibility": "public-only",
@@ -20,6 +20,12 @@
   "output": {
     "layout": "namespaced-modules",
     "strip_nested_git": true
+  },
+  "analysis": {
+    "enabled": true,
+    "mode": "deterministic-static-first",
+    "auto_execute_discovered_tests": false,
+    "generate_offline_dashboard": true
   },
   "build_enabled": false,
   "hold_reason": "Do not capture current mains yet; first merge/reconcile the current growth batch, then explicitly enable assembly for the chosen snapshot moment."

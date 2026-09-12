@@ -55,6 +55,14 @@ class GhostStudioReferenceKitTests(unittest.TestCase):
         self.assertGreater(MODULE.MATERIALS["red_glow"]["emissive"][0], 0.9)
         self.assertGreater(MODULE.MATERIALS["dark_metal"]["metallic"], 0.8)
 
+    def test_jpeg_metadata_is_dependency_free(self):
+        jpeg = (
+            b"\xff\xd8\xff\xc0\x00\x11\x08"
+            + struct.pack(">HH", 1024, 1536)
+            + b"\x03\x01\x11\x00\x02\x11\x00\x03\x11\x00\xff\xd9"
+        )
+        self.assertEqual(MODULE._image_metadata(jpeg), ("JPEG", 1536, 1024))
+
 
 if __name__ == "__main__":
     unittest.main()

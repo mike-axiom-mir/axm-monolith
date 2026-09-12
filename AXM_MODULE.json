@@ -1,0 +1,51 @@
+{
+  "capabilities": [
+    {
+      "accepts": [
+        "stack.analysis"
+      ],
+      "description": "Derive a reusable capability-level graph, bounded candidate pipelines, goal queries, and explicit missing-provider/adapter leads from an analyzed Monolith snapshot.",
+      "evidence": {
+        "status": "fixture_tested"
+      },
+      "id": "stack.pipeline-intelligence",
+      "provides": [
+        "capability.graph",
+        "pipeline.candidate",
+        "pipeline.gap",
+        "pipeline.query"
+      ],
+      "tags": [
+        "monolith",
+        "capability",
+        "pipeline",
+        "discovery",
+        "composition"
+      ]
+    }
+  ],
+  "entrypoints": [
+    {
+      "command": "python tools/pipeline_fabric.py export <build-dir>",
+      "kind": "python-cli",
+      "path": "tools/pipeline_fabric.py"
+    },
+    {
+      "command": "python tools/pipeline_fabric.py goal <build-dir> <goal-token>",
+      "kind": "python-cli",
+      "path": "tools/pipeline_fabric.py"
+    }
+  ],
+  "module": {
+    "name": "axm-monolith",
+    "purpose": "On-demand assembly, inspection, capability/pipeline discovery, and bounded testing of the public AXM stack without erasing source identity."
+  },
+  "schema_version": "0.1",
+  "tests": [
+    {
+      "command": "python -m unittest tests.test_pipeline_fabric -v",
+      "evidence": "fixture"
+    }
+  ],
+  "truth_boundary": "Pipeline discovery is candidate evidence only. This manifest grants no automatic execution, merge, CANON, installation, device, or network authority."
+}

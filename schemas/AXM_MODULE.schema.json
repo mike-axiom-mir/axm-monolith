@@ -1,0 +1,47 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/mike-axiom-mir/axm-monolith/blob/main/schemas/AXM_MODULE.schema.json",
+  "title": "AXM Native Module Capability Manifest",
+  "type": "object",
+  "required": ["schema_version", "capabilities"],
+  "properties": {
+    "schema_version": {"type": "string"},
+    "module": {
+      "type": "object",
+      "properties": {
+        "name": {"type": "string"},
+        "purpose": {"type": "string"}
+      },
+      "additionalProperties": true
+    },
+    "capabilities": {
+      "type": "array",
+      "items": {
+        "oneOf": [
+          {"type": "string"},
+          {
+            "type": "object",
+            "required": ["id"],
+            "properties": {
+              "id": {"type": "string"},
+              "description": {"type": "string"},
+              "provides": {"type": "array", "items": {"type": "string"}},
+              "accepts": {"type": "array", "items": {"type": "string"}},
+              "tags": {"type": "array", "items": {"type": "string"}},
+              "evidence_status": {"type": "string"},
+              "evidence": {
+                "type": "object",
+                "properties": {"status": {"type": "string"}},
+                "additionalProperties": true
+              }
+            },
+            "additionalProperties": true
+          }
+        ]
+      }
+    },
+    "entrypoints": {"type": "array", "items": {"type": "object"}},
+    "tests": {"type": "array", "items": {"type": "object"}}
+  },
+  "additionalProperties": true
+}

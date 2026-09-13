@@ -1,9 +1,13 @@
 #!/usr/bin/env python3
 """Explicitly invoke one source-declared callable from a materialized AXM snapshot.
 
-v0.1 deliberately supports only `module-export` + `javascript-esm`. Invocation is never
-performed during assembly or registry generation and requires an explicit execution opt-in.
-The tool never uses a shell.
+v0.2 supports explicitly opted-in `module-export` callables for two runtimes:
+
+- `javascript-esm`
+- `python`
+
+Invocation is never performed during assembly or registry generation.  The tool never uses
+a shell.  A source declaration still grants no permission to execute by itself.
 
 Truth boundary: a successful receipt proves only that the exact captured source export ran
 for the exact supplied JSON arguments in this environment. It grants no merge/CANON,
@@ -18,6 +22,7 @@ import json
 from pathlib import Path
 import shutil
 import subprocess
+import sys
 from typing import Any
 
 REQUEST_SCHEMA = "axm.callable-invocation-request/v0.1"
@@ -90,13 +95,53 @@ def _base_receipt(entry: dict[str, Any], request: Any) -> dict[str, Any]:
     }
 
 
+def _runtime_command(
+    descriptor: dict[str, Any],
+    target: Path,
+    *,
+    allow_javascript_esm: bool,
+    allow_python: bool,
+    node_command: str,
+    python_command: str,
+) -> tuple[list[str] | None, str | None]:
+    runtime = descriptor.get("runtime")
+    export_name = str(descriptor.get("export") or "")
+    tools = Path(__file__).resolve().parent
+
+    if runtime == "javascript-esm":
+        if not allow_javascript_esm:
+            return None, "blocked_explicit_execution_opt_in_required"
+        node = shutil.which(node_command)
+        if not node:
+            return None, "blocked_missing_javascript_runtime"
+        runner = tools / "js_callable_runner.mjs"
+        if not runner.is_file():
+            raise InvocationError("JavaScript callable runner is missing")
+        return [node, str(runner), str(target), export_name], None
+
+    if runtime == "python":
+        if not allow_python:
+            return None, "blocked_explicit_execution_opt_in_required"
+        python = shutil.which(python_command)
+        if not python:
+            return None, "blocked_missing_python_runtime"
+        runner = tools / "python_callable_runner.py"
+        if not runner.is_file():
+            raise InvocationError("Python callable runner is missing")
+        return [python, str(runner), str(target), export_name], None
+
+    return None, "blocked_unsupported_callable_runtime"
+
+
 def invoke_declared_callable(
     snapshot: str | Path,
     address: str,
     request: Any,
     *,
     allow_javascript_esm: bool = False,
+    allow_python: bool = False,
     node_command: str = "node",
+    python_command: str = sys.executable,
     timeout_seconds: float = 10.0,
 ) -> dict[str, Any]:
     root = Path(snapshot).resolve()
@@ -123,34 +168,33 @@ def invoke_declared_callable(
     if descriptor.get("kind") != "module-export":
         receipt.update(status="blocked_unsupported_callable_kind")
         return receipt
-    if descriptor.get("runtime") != "javascript-esm":
-        receipt.update(status="blocked_unsupported_callable_runtime")
-        return receipt
-    if not allow_javascript_esm:
-        receipt.update(status="blocked_explicit_execution_opt_in_required")
-        return receipt
 
     if not isinstance(request, dict) or request.get("schema") != REQUEST_SCHEMA or not isinstance(request.get("args"), list):
         receipt.update(status="blocked_invalid_invocation_request")
         return receipt
 
     target = _safe_target(root, str(entry.get("module") or ""), descriptor.get("path"))
+    command, blocked_status = _runtime_command(
+        descriptor,
+        target,
+        allow_javascript_esm=allow_javascript_esm,
+        allow_python=allow_python,
+        node_command=node_command,
+        python_command=python_command,
+    )
+    if blocked_status:
+        receipt.update(status=blocked_status)
+        return receipt
+    assert command is not None
+
     receipt["source_file"] = target.relative_to(root / "modules" / str(entry.get("module"))).as_posix()
     receipt["source_file_sha256"] = _sha256_file(target)
     receipt["export"] = descriptor.get("export")
     receipt["runtime"] = descriptor.get("runtime")
 
-    node = shutil.which(node_command)
-    if not node:
-        receipt.update(status="blocked_missing_javascript_runtime")
-        return receipt
-    runner = Path(__file__).resolve().with_name("js_callable_runner.mjs")
-    if not runner.is_file():
-        raise InvocationError("JavaScript callable runner is missing")
-
     try:
         completed = subprocess.run(
-            [node, str(runner), str(target), str(descriptor.get("export"))],
+            command,
             input=json.dumps(request, separators=(",", ":"), ensure_ascii=False),
             text=True,
             capture_output=True,
@@ -194,7 +238,9 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--request", required=True, help="JSON invocation request file")
     parser.add_argument("--receipt", required=True, help="path for the invocation receipt")
     parser.add_argument("--allow-javascript-esm", action="store_true", help="explicitly permit JavaScript ESM source execution")
+    parser.add_argument("--allow-python", action="store_true", help="explicitly permit Python source execution")
     parser.add_argument("--node", default="node", help="Node.js executable name/path")
+    parser.add_argument("--python", default=sys.executable, help="Python executable name/path")
     parser.add_argument("--timeout", type=float, default=10.0)
     args = parser.parse_args(argv)
 
@@ -205,7 +251,9 @@ def main(argv: list[str] | None = None) -> int:
             args.address,
             request,
             allow_javascript_esm=args.allow_javascript_esm,
+            allow_python=args.allow_python,
             node_command=args.node,
+            python_command=args.python,
             timeout_seconds=args.timeout,
         )
     except InvocationError as exc:

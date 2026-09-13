@@ -85,6 +85,34 @@ The resulting status may be `exercised_with_receipt` for that exact invocation. 
 
 Source execution still occurs with the host process permissions of the environment in which the user explicitly invoked it. v0.1 is not a process/network sandbox.
 
+## Execution evidence ledger
+
+`tools/callable_execution_ledger.py` keeps execution evidence separate from source declaration state.
+
+It consumes:
+
+- the snapshot's `CALLABLE_CAPABILITY_REGISTRY.json`;
+- one directory containing invocation receipts and, optionally, neighboring request JSON files.
+
+It ignores non-receipt JSON and revalidates each receipt against the captured snapshot before accepting execution evidence. For an exercised receipt that includes source execution it verifies:
+
+- exact registry address/module/capability identity;
+- native manifest SHA-256;
+- exact declared callable descriptor;
+- exact captured source path and source-file SHA-256;
+- runtime/export identity;
+- canonical response SHA-256;
+- success/result consistency;
+- `source_capability_execution: true` only with `status: exercised_with_receipt`.
+
+Pre-execution policy/runtime blocks and source failures may be preserved as non-success evidence, but they are not counted as exercised addresses. Identity-invalid or malformed receipt evidence is fail-closed and may make strict ledger generation fail.
+
+The output schema is:
+
+`axm.monolith.callable-execution-ledger/v0.1`
+
+A capability declaration remains `declared_callable_not_exercised` in the registry even when the separate ledger contains accepted receipts. That separation prevents one successful run from silently rewriting the source declaration into a general execution claim.
+
 ## Execution promotion
 
 The evidence ladder is:
@@ -92,6 +120,7 @@ The evidence ladder is:
 ```text
 declared_callable_not_exercised
 -> exercised_with_receipt
+-> execution ledger preserves validated receipt(s)
 -> exact_composition_exercised
 ```
 
@@ -101,4 +130,4 @@ Additional binding-validation rungs may be added where a runtime needs them. No 
 
 The connected Monolith can currently address far more capabilities than it can actually call. Hard-coding every repository into the Monolith would turn the assembler into a permanent ownership bottleneck.
 
-The source-declared contract instead lets each module publish its own bounded call surface while Monolith remains an inspector/router/evidence consumer. This keeps source identity, offline/local operation, provenance, explicit execution consent, and fail-closed boundaries intact.
+The source-declared contract instead lets each module publish its own bounded call surface while Monolith remains an inspector/router/evidence consumer. The separate execution ledger gives future execution fabrics durable evidence to consume without confusing declaration, execution, and authority. This keeps source identity, offline/local operation, provenance, explicit execution consent, and fail-closed boundaries intact.

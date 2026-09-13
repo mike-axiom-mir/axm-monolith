@@ -1,4 +1,4 @@
-name: Native callable RTS cross-repo discovery and invocation
+name: Native callable RTS cross-repo discovery invocation and ledger
 
 on:
   pull_request:
@@ -9,6 +9,7 @@ on:
       - 'tools/callable_registry.py'
       - 'tools/invoke_declared_callable.py'
       - 'tools/js_callable_runner.mjs'
+      - 'tools/callable_execution_ledger.py'
       - 'schemas/AXM_CALLABLE.schema.json'
       - 'schemas/AXM_MODULE.schema.json'
   workflow_dispatch:
@@ -17,7 +18,7 @@ permissions:
   contents: read
 
 jobs:
-  discover-and-invoke-rts-callable:
+  discover-invoke-and-ledger-rts-callable:
     runs-on: ubuntu-latest
     timeout-minutes: 8
     steps:
@@ -64,10 +65,10 @@ jobs:
               assert entry['callable']['authority'] == 'none'
               assert entry['errors'] == []
 
-          registry_tool = Path('tools/callable_registry.py').read_text()
-          invoker_tool = Path('tools/invoke_declared_callable.py').read_text()
-          assert 'axm-global-state-rts' not in registry_tool
-          assert 'axm-global-state-rts' not in invoker_tool
+          for tool_name in ('callable_registry.py', 'invoke_declared_callable.py', 'callable_execution_ledger.py'):
+              tool_path = Path('tools') / tool_name
+              if tool_path.exists():
+                  assert 'axm-global-state-rts' not in tool_path.read_text(), f'{tool_name} must remain donor-generic'
           PY
 
       - name: Explicitly invoke only the pure LOD selector at 360 m and 90 m
@@ -109,20 +110,51 @@ jobs:
           assert r360['result']['farCandidateStatus'] == 'HOLD_DISTANCE_HANDOFF_UNPROVEN'
           assert r90['result']['distanceM'] == 90
           assert r90['result']['role'] == 'tactical'
+          PY
+
+      - name: Build deterministic execution evidence ledger
+        run: |
+          python tools/callable_execution_ledger.py \
+            snapshot \
+            --receipts snapshot/evidence/native-callable \
+            --strict
+
+          python - <<'PY'
+          import json
+          from pathlib import Path
+
+          ledger = json.loads(Path('snapshot/CALLABLE_EXECUTION_LEDGER.json').read_text())
+          assert ledger['schema'] == 'axm.monolith.callable-execution-ledger/v0.1'
+          summary = ledger['summary']
+          assert summary['registry_declared_callable_count'] == 2
+          assert summary['receipt_files_recorded'] == 2
+          assert summary['ignored_non_receipt_json'] == 2
+          assert summary['accepted_exercised_receipts'] == 2
+          assert summary['observed_non_success_receipts'] == 0
+          assert summary['blocked_invalid_receipts'] == 0
+          assert summary['exercised_address_count'] == 1
+          assert ledger['executed_addresses'] == ['axm-global-state-rts::asset.workshop-lod-selection']
+
+          capability = ledger['capabilities'][0]
+          assert capability['address'] == 'axm-global-state-rts::asset.workshop-lod-selection'
+          assert capability['receipt_count'] == 2
+          assert capability['accepted_exercised_receipts'] == 2
+          assert capability['source_capability_execution'] is True
 
           registry = json.loads(Path('snapshot/CALLABLE_CAPABILITY_REGISTRY.json').read_text())
           installer = next(entry for entry in registry['entries'] if entry['capability'] == 'asset.workshop-lod-installation')
           assert installer['status'] == 'declared_callable_not_exercised'
           assert installer['source_capability_execution'] is False
-          print('generic source-declared invocation: PASS (selection exercised; host-callback installer remains declared only)')
+          print('generic execution ledger: PASS (one exercised address; unrelated installer still declaration-only)')
           PY
 
-      - name: Preserve cross-repo discovery and invocation receipts
+      - name: Preserve cross-repo discovery invocation and ledger evidence
         uses: actions/upload-artifact@v4
         with:
-          name: native-callable-rts-discovery-and-invocation
+          name: native-callable-rts-discovery-invocation-ledger
           path: |
             snapshot/CALLABLE_CAPABILITY_REGISTRY.json
+            snapshot/CALLABLE_EXECUTION_LEDGER.json
             snapshot/evidence/native-callable/request-360.json
             snapshot/evidence/native-callable/request-90.json
             snapshot/evidence/native-callable/receipt-360.json

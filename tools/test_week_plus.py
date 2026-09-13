@@ -2,7 +2,7 @@
 """AXM Monolith first-test launcher with capability lab and AI-native user-facing testing.
 
 This wraps the existing exact-plan test drive rather than replacing its source/provenance
-logic. The build hold remains external and must be deliberately released first.
+logic. Build remains deliberate and requires explicit confirmation.
 """
 
 from __future__ import annotations

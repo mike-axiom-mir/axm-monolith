@@ -31,7 +31,7 @@ class MachineVoiceBridgeContractTests(unittest.TestCase):
         self.assertIn("../axm-machine-voice/machine_voice.py snapshot", bridge)
         self.assertIn("--active-ref activity:assembly-control", bridge)
         self.assertIn("not yet claimed cross-repository verified", bridge)
-        self.assertIn("build capability stays hard-disabled", readme)
+        self.assertIn("obsolete first-build hold is released", readme)
 
     def test_exporter_does_not_embed_interpretation_fields(self):
         tool = (ROOT / "tools" / "export_machine_voice_state.py").read_text(encoding="utf-8")

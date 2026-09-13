@@ -10,10 +10,13 @@ Serves one already materialized snapshot from 127.0.0.1 and exposes a tiny local
 - POST /api/stress/start  switch activate-all stress mode ON
 - POST /api/stress/stop   switch activate-all stress mode OFF
 - POST /api/stress/browser-shed record one adaptive browser-surface shed
+- GET  /api/capabilities inspect exact native callable declarations
+- POST /api/invoke       explicitly execute one exact declared callable and ledger its receipt
+- POST /api/workflow     explicitly execute one registered bounded workflow
 
-Normal capability use does not execute source-module CLI commands. The stress endpoints are
-the explicit exception: they invoke the bounded application-entrypoint plan produced by the
-adaptive stress controller and preserve an immediate OFF path.
+Normal browsing does not execute source-module code. The stress, invoke, and workflow endpoints
+are explicit exceptions: each requires an explicit action, uses a bounded runtime/plan, and
+records evidence inside the exact snapshot.
 """
 
 from __future__ import annotations
@@ -41,6 +44,19 @@ SUPPORTED_ACTIONS = {
     "tap_key", "key_down", "key_up", "type_text", "wait", "click",
     "click_selector", "focus_selector", "reload", "snapshot",
 }
+
+
+def safe_snapshot_path(snapshot: Path, value: Any, *, required: bool = True) -> Path | None:
+    if value is None and not required:
+        return None
+    if not isinstance(value, str) or not value.strip() or "\x00" in value:
+        raise ValueError("snapshot path must be a non-empty relative string")
+    candidate = (snapshot / value).resolve()
+    try:
+        candidate.relative_to(snapshot.resolve())
+    except ValueError as exc:
+        raise ValueError("snapshot path escapes the snapshot") from exc
+    return candidate
 
 
 def utc_now() -> str:
@@ -144,6 +160,7 @@ class ServerState:
         self.command_sequence = 0
         self.evidence_sequence = 0
         self.result_sequence = 0
+        self.execution_sequence = 0
         self.stress = StressController(snapshot)
 
     def next_command_id(self) -> int:
@@ -160,6 +177,11 @@ class ServerState:
         with self.lock:
             self.result_sequence += 1
             return self.result_sequence
+
+    def next_execution_id(self) -> int:
+        with self.lock:
+            self.execution_sequence += 1
+            return self.execution_sequence
 
 
 class SnapshotHandler(SimpleHTTPRequestHandler):
@@ -211,6 +233,13 @@ class SnapshotHandler(SimpleHTTPRequestHandler):
         if parsed.path == "/api/stress/status":
             self._json(self.state.stress.status())
             return
+        if parsed.path == "/api/capabilities":
+            registry = self.state.snapshot / "CALLABLE_CAPABILITY_REGISTRY.json"
+            if not registry.is_file():
+                self._json({"error": "callable registry is missing; re-run snapshot plumbing"}, status=404)
+                return
+            self._json(json.loads(registry.read_text(encoding="utf-8")))
+            return
         if parsed.path == "/api/next-command":
             try:
                 item = self.state.commands.get_nowait()
@@ -247,6 +276,51 @@ class SnapshotHandler(SimpleHTTPRequestHandler):
                 self.state.commands.put(command)
                 self._json({"accepted": True, "command": command}, status=202)
                 return
+            if parsed.path == "/api/invoke":
+                if not isinstance(payload, dict) or payload.get("confirm_execution") != "EXECUTE_EXACT_DECLARED_CALLABLE":
+                    raise ValueError("invoke requires confirm_execution=EXECUTE_EXACT_DECLARED_CALLABLE")
+                address = payload.get("address")
+                request = payload.get("request")
+                if not isinstance(address, str) or not address:
+                    raise ValueError("invoke address must be a non-empty string")
+                from invoke_declared_callable import invoke_declared_callable
+                from callable_execution_ledger import write_ledger
+                receipt = invoke_declared_callable(
+                    self.state.snapshot,
+                    address,
+                    request,
+                    allow_javascript_esm=True,
+                    allow_python=True,
+                    timeout_seconds=float(payload.get("timeout_seconds", 30.0)),
+                )
+                receipt_root = self.state.snapshot / "evidence" / "callable-invocations"
+                receipt_root.mkdir(parents=True, exist_ok=True)
+                sequence = self.state.next_execution_id()
+                receipt_path = receipt_root / f"api-{sequence:06d}.json"
+                receipt_path.write_text(json.dumps(receipt, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+                ledger = write_ledger(self.state.snapshot, receipt_root, strict=True)
+                status = 200 if receipt.get("status") == "exercised_with_receipt" else 409
+                self._json({"receipt": receipt, "ledger_summary": ledger["summary"], "receipt_path": f"evidence/callable-invocations/{receipt_path.name}"}, status=status)
+                return
+            if parsed.path == "/api/workflow":
+                if not isinstance(payload, dict) or payload.get("confirm_execution") != "EXECUTE_EXACT_WORKFLOW":
+                    raise ValueError("workflow requires confirm_execution=EXECUTE_EXACT_WORKFLOW")
+                from ghost_studio_pipeline import WORKFLOW_ID, run_workflow
+                if payload.get("workflow") != WORKFLOW_ID:
+                    raise ValueError(f"unknown workflow: {payload.get('workflow')}")
+                output = safe_snapshot_path(self.state.snapshot, payload.get("output") or "outputs/blackline-3d")
+                reference = safe_snapshot_path(self.state.snapshot, payload.get("reference"), required=False)
+                assert output is not None
+                receipt = run_workflow(
+                    self.state.snapshot,
+                    output,
+                    reference=reference,
+                    max_attempts=int(payload.get("max_attempts", 2)),
+                    exercise_rejection=bool(payload.get("exercise_rejection", False)),
+                )
+                status = 200 if receipt.get("status") == "EXECUTED_END_TO_END_AND_STRUCTURALLY_ACCEPTED" else 409
+                self._json({"workflow": receipt, "output": str(output.relative_to(self.state.snapshot))}, status=status)
+                return
             if parsed.path == "/api/evidence":
                 if not isinstance(payload, dict):
                     raise ValueError("evidence body must be an object")
@@ -264,7 +338,7 @@ class SnapshotHandler(SimpleHTTPRequestHandler):
                 self._json({"saved": True})
                 return
             self._json({"error": "unknown API path"}, status=404)
-        except (ValueError, json.JSONDecodeError, UnicodeDecodeError) as exc:
+        except (ValueError, RuntimeError, OSError, json.JSONDecodeError, UnicodeDecodeError) as exc:
             self._json({"error": str(exc)}, status=400)
 
 

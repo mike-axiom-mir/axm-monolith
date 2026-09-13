@@ -92,6 +92,52 @@
         "consumer",
         "counterexample"
       ]
+    },
+    {
+      "accepts": [
+        "stack.snapshot",
+        "stack.analysis"
+      ],
+      "description": "Automatically install exact leaf inventory, candidate pipeline export, native callable discovery, bounded invocation runtimes, execution-ledger support, and one local front door into a materialized snapshot.",
+      "evidence": {
+        "status": "fixture_tested",
+        "boundary": "plumbing availability is not source execution evidence"
+      },
+      "id": "stack.execution-plumbing",
+      "provides": [
+        "capability.leaf-registry",
+        "capability.callable-registry",
+        "runtime.bounded-invocation",
+        "interface.local-front-door"
+      ],
+      "tags": [
+        "monolith",
+        "plumbing",
+        "execution",
+        "evidence"
+      ]
+    },
+    {
+      "accepts": [
+        "stack.snapshot",
+        "evidence.execution",
+        "workflow.receipt"
+      ],
+      "description": "Re-plumb and package a snapshot only after explicitly required callable or workflow receipts pass, with file-by-file hashes and unsafe-path rejection.",
+      "evidence": {
+        "status": "fixture_tested_fail_closed"
+      },
+      "id": "release.evidence-gated-package",
+      "provides": [
+        "artifact.connected-monolith-zip",
+        "evidence.package-integrity"
+      ],
+      "tags": [
+        "monolith",
+        "release",
+        "package",
+        "evidence"
+      ]
     }
   ],
   "entrypoints": [
@@ -119,6 +165,16 @@
       "command": "python tools/import_invariant_packet.py <counterexample.json>",
       "kind": "python-cli",
       "path": "tools/import_invariant_packet.py"
+    },
+    {
+      "command": "python tools/monolith_plumbing.py <snapshot>",
+      "kind": "python-cli",
+      "path": "tools/monolith_plumbing.py"
+    },
+    {
+      "command": "python tools/finalize_connected_snapshot.py --snapshot <snapshot> --output-zip <zip> --folder-name <name> --confirm-finalize",
+      "kind": "python-cli",
+      "path": "tools/finalize_connected_snapshot.py"
     }
   ],
   "module": {
@@ -142,7 +198,11 @@
     {
       "command": "python -m unittest tests.test_invariant_evidence_consumer -v",
       "evidence": "exact pinned AXM Invariant Lab counterexample v0.1 fixture"
+    },
+    {
+      "command": "python -m unittest tests.test_connected_finalization -v",
+      "evidence": "synthetic source-callable snapshot, accepted receipt ledger, fail-closed package gate, and Ghost Studio structural rejection fixture"
     }
   ],
-  "truth_boundary": "Pipeline discovery is candidate evidence only. Machine Voice export is a state-contract handoff only and is not cross-repository runtime verification. The local Machine Voice composition runner becomes cross-repository runtime evidence only when executed against a real local/staged Machine Voice checkout; repository CI uses a fake external process and must not be called runtime verification. Invariant Lab packet import preserves external FAIL/HOLD evidence but does not prove Monolith behavior, verify or invalidate a pipeline, or grant authority. This manifest grants no automatic execution, merge, CANON, installation, device, network, or assembly authority."
+  "truth_boundary": "Pipeline discovery and declared leaf IDs are catalogue evidence only. Plumbing availability is not source execution, and there is no automatic execution of source capabilities. Machine Voice export is a state-contract handoff only and is not cross-repository runtime verification. The local Machine Voice composition runner becomes cross-repository runtime evidence only when executed against a real local/staged Machine Voice checkout; repository CI uses a fake external process and must not be called runtime verification. Invariant Lab packet import preserves external FAIL/HOLD evidence but does not prove Monolith behavior, verify or invalidate a pipeline, or grant authority. Connected packaging proves only explicitly required validated receipts. This manifest grants no automatic merge, CANON, installation, device, network, or risk authority."
 }

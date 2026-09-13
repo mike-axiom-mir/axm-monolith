@@ -28,12 +28,10 @@
     "generate_offline_dashboard": true
   },
   "build_enabled": true,
-  "hold_reason": null,
-  "finalization": {
-    "automatic_plumbing": true,
-    "package_requires_explicit_confirmation": true,
-    "candidate_edges_count_as_execution": false,
-    "declared_leaf_ids_count_as_execution": false,
-    "required_workflows_must_have_accepted_receipts": true
+  "hold_reason": "",
+  "experiment": {
+    "id": "ghost-studio-asset-trial-v0.1",
+    "authorization": "Explicit user request on 2026-09-12 to assemble the current public AXM stack and test it by creating assets for Ghost Studio.",
+    "boundary": "This names the Ghost Studio trial while using the same released, explicit-confirmation assembly path as the default configuration. It does not change source-repository authority."
   }
 }

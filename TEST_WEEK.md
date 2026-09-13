@@ -6,11 +6,7 @@ The goal is to make the first test easy without weakening source identity, priva
 
 ## Before test day
 
-Leave `config/assembly.json` with `build_enabled: false` until the chosen public repository heads are actually ready to capture.
-
-Do not prepare a plan early and call it next week's state. **The plan is the snapshot moment.**
-
-When the growth batch is ready, deliberately release the hold first. None of the test-week tooling releases it automatically.
+`config/assembly.json` now permits deliberate builds. Do not prepare a plan early and call it next week's state: **the plan is the snapshot moment**. Every materialization still requires explicit confirmation.
 
 ## The simple route
 

@@ -28,6 +28,13 @@ OPEN_ME.html
 
 That page is the Capability Lab / front door for the whole captured stack.
 
+Every automatically plumbed snapshot also carries optional direct shortcuts:
+
+- `RUN_DECLARED_CAPABILITY.cmd` / `.sh` for an explicitly requested native callable;
+- `RUN_BLACKLINE_PIPELINE.cmd` / `.sh` for the bounded Ghost Studio workflow.
+
+Those shortcuts do not replace the one default front door and do not run automatically.
+
 ## What “launch the entirety” means
 
 It means **launch one front door that can see and use the entire captured stack**.

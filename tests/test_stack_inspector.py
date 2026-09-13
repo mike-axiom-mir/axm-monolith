@@ -113,6 +113,32 @@ class StackInspectorTests(unittest.TestCase):
             self.assertEqual(queue[0]["module"], "axm-ghost-studio")
             self.assertGreaterEqual(queue[0]["priority"], 4)
 
+    def test_leaf_registry_preserves_exact_ids_and_provenance_without_callable_claim(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            module = self.make_module(root, "deep-module")
+            self.write(module / "atoms" / "first.json", json.dumps({
+                "id": "mesh.generate",
+                "level": "atom",
+                "capability_ids": ["mesh.inspect", "mesh.export"],
+            }))
+            self.write(module / "organs" / "second.json", json.dumps({
+                "id": "mesh.generate",
+                "level": "organ",
+            }))
+            registry = inspect_stack.build_leaf_capability_registry(root)
+            self.assertEqual(registry["summary"]["declared_leaf_capability_count"], 3)
+            self.assertEqual(registry["summary"]["declaration_occurrence_count"], 4)
+            entry = next(item for item in registry["entries"] if item["id"] == "mesh.generate")
+            self.assertEqual(entry["address"], "deep-module::leaf::mesh.generate")
+            self.assertEqual(len(entry["occurrences"]), 2)
+            self.assertFalse(entry["source_capability_execution"])
+
+            inspect_stack.analyze_build(root)
+            self.assertTrue((root / "LEAF_CAPABILITY_REGISTRY.json").is_file())
+            analysis = json.loads((root / "STACK_ANALYSIS.json").read_text(encoding="utf-8"))
+            self.assertEqual(analysis["summary"]["declared_leaf_capability_count"], 3)
+
 
 if __name__ == "__main__":
     unittest.main()

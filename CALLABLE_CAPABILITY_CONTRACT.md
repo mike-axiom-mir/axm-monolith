@@ -21,17 +21,17 @@ Example:
 
 ```json
 {
-  "id": "asset.workshop-lod-select",
+  "id": "asset.workshop-lod-selection",
   "provides": ["asset.lod-selection"],
   "accepts": ["view.camera-distance"],
   "callable": {
     "schema": "axm.callable-capability/v0.1",
     "kind": "module-export",
     "runtime": "javascript-esm",
-    "path": "src/assets/workshop-lod-installer.mjs",
-    "export": "selectWorkshopLodForView",
-    "input_contract": "axm.global-state-rts.workshop-lod-view/v0.1",
-    "output_contract": "axm.global-state-rts.workshop-lod-selection/v0.1",
+    "path": "src/assets/workshop-lod-policy.mjs",
+    "export": "selectWorkshopRuntimeLod",
+    "input_contract": "axm.global-state-rts.workshop-camera-distance/v0.1",
+    "output_contract": "axm.global-state-rts.workshop-runtime-lod-policy/v0.1",
     "authority": "none",
     "network": "none"
   }
@@ -59,23 +59,46 @@ Invalid declarations are retained as:
 
 They do not silently fall back to inferred execution.
 
+## Explicit execution rung
+
+`tools/invoke_declared_callable.py` is deliberately separate from assembly and registry discovery. It never runs automatically.
+
+v0.1 supports only:
+
+- `kind: module-export`;
+- `runtime: javascript-esm`;
+- an explicit `--allow-javascript-esm` opt-in;
+- one JSON request envelope containing positional `args`.
+
+The helper does not use a shell. `command` declarations and unsupported runtimes remain blocked.
+
+A successful invocation writes an `axm.monolith.callable-invocation-receipt/v0.1` receipt bound to:
+
+- exact module/capability address;
+- native manifest SHA-256;
+- exact callable source-file SHA-256;
+- canonical request SHA-256;
+- canonical response SHA-256;
+- runtime/export identity.
+
+The resulting status may be `exercised_with_receipt` for that exact invocation. The capability registry itself remains a declaration registry rather than silently rewriting maturity from one run.
+
+Source execution still occurs with the host process permissions of the environment in which the user explicitly invoked it. v0.1 is not a process/network sandbox.
+
 ## Execution promotion
 
-A future execution fabric may consume this registry, but it must still validate the exact runtime and binding before setting `source_capability_execution: true`.
-
-A suggested evidence ladder is:
+The evidence ladder is:
 
 ```text
 declared_callable_not_exercised
--> binding_validated_not_exercised
 -> exercised_with_receipt
 -> exact_composition_exercised
 ```
 
-No rung grants merge/CANON authority. No successful invocation upgrades unrelated capabilities.
+Additional binding-validation rungs may be added where a runtime needs them. No rung grants merge/CANON authority. No successful invocation upgrades unrelated capabilities.
 
 ## Why this exists
 
 The connected Monolith can currently address far more capabilities than it can actually call. Hard-coding every repository into the Monolith would turn the assembler into a permanent ownership bottleneck.
 
-The source-declared contract instead lets each module publish its own bounded call surface while Monolith remains an inspector/router/evidence consumer. This keeps source identity, offline/local operation, provenance, and fail-closed execution boundaries intact.
+The source-declared contract instead lets each module publish its own bounded call surface while Monolith remains an inspector/router/evidence consumer. This keeps source identity, offline/local operation, provenance, explicit execution consent, and fail-closed boundaries intact.

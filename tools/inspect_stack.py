@@ -20,7 +20,7 @@ import sys
 import tomllib
 from typing import Any, Iterable
 
-SCHEMA_VERSION = "0.2"
+SCHEMA_VERSION = "0.3"
 MANIFEST_NAMES = ("AXM_MODULE.json", "axm-module.json", ".axm/module.json")
 README_NAMES = ("README.md", "README.MD", "readme.md", "README.txt")
 SKIP_DIRS = {
@@ -36,6 +36,7 @@ LANGUAGE_BY_SUFFIX = {
     ".ps1": "PowerShell", ".sql": "SQL", ".wasm": "WebAssembly",
 }
 ASSET_SUFFIXES = {".png", ".jpg", ".jpeg", ".webp", ".svg", ".gif", ".wav", ".mp3", ".ogg", ".glb", ".gltf", ".obj", ".fbx"}
+LEAF_LEVELS = {"atom", "organ", "capability", "prototype", "shadow", "tool"}
 
 DOMAIN_RULES: list[dict[str, Any]] = [
     {"id":"creation.universal","description":"General creation / software construction capability is described by this module.","terms":("universal-creation","universal creation","creation machine"),"provides":("artifact","artifact.software","capability.generated"),"accepts":("objective","specification","capability.request"),"tags":("creation","software")},
@@ -307,10 +308,130 @@ def automated_test_queue(modules: list[dict[str,Any]]) -> list[dict[str,Any]]:
     return [{"module":m["module"],**test,"status":"discovered_not_run"} for m in modules for test in m["tests"]]
 
 
-def stack_summary(modules,graph,human_queue,automated_queue,compositions):
+def _json_pointer_token(value: str) -> str:
+    return value.replace("~", "~0").replace("/", "~1")
+
+
+def _leaf_occurrences(value: Any, *, path: str, pointer: str = "") -> list[dict[str, str]]:
+    """Return exact machine-readable capability identifiers with provenance.
+
+    This deliberately does not infer identifiers from prose. It records explicit IDs in
+    atom/organ/capability-like objects and string IDs in capability arrays. Duplicate
+    occurrences are retained so template/reference density is not confused with identity.
+    """
+    found: list[dict[str, str]] = []
+    if isinstance(value, dict):
+        level = str(value.get("level") or "").strip().lower()
+        declared = value.get("capability_id") if isinstance(value.get("capability_id"), str) else value.get("id")
+        path_parts = {part.lower() for part in Path(path).parts}
+        path_level = "atom" if "atoms" in path_parts else "organ" if "organs" in path_parts else ""
+        if isinstance(declared, str) and declared.strip() and (level in LEAF_LEVELS or path_level):
+            found.append({
+                "id": declared.strip(),
+                "level": level or path_level,
+                "path": path,
+                "pointer": pointer or "/",
+                "declaration": "object-id",
+            })
+        for key in ("capabilities", "capability_ids"):
+            items = value.get(key)
+            if isinstance(items, list):
+                base = f"{pointer}/{_json_pointer_token(key)}"
+                for index, item in enumerate(items):
+                    if isinstance(item, str) and item.strip():
+                        found.append({
+                            "id": item.strip(),
+                            "level": "capability",
+                            "path": path,
+                            "pointer": f"{base}/{index}",
+                            "declaration": f"{key}-item",
+                        })
+                    elif isinstance(item, dict):
+                        item_id = item.get("capability_id") if isinstance(item.get("capability_id"), str) else item.get("id")
+                        item_level = str(item.get("level") or "").strip().lower()
+                        item_path_parts = {part.lower() for part in Path(path).parts}
+                        if (isinstance(item_id, str) and item_id.strip()
+                                and item_level not in LEAF_LEVELS
+                                and not ({"atoms", "organs"} & item_path_parts)):
+                            found.append({
+                                "id": item_id.strip(),
+                                "level": "capability",
+                                "path": path,
+                                "pointer": f"{base}/{index}",
+                                "declaration": f"{key}-object",
+                            })
+        for key, item in value.items():
+            found.extend(_leaf_occurrences(
+                item,
+                path=path,
+                pointer=f"{pointer}/{_json_pointer_token(str(key))}",
+            ))
+    elif isinstance(value, list):
+        for index, item in enumerate(value):
+            found.extend(_leaf_occurrences(item, path=path, pointer=f"{pointer}/{index}"))
+    return found
+
+
+def build_leaf_capability_registry(build_root: Path) -> dict[str, Any]:
+    root = build_root.resolve()
+    modules_root = root / "modules"
+    if not modules_root.is_dir():
+        raise ValueError(f"not an AXM monolith build: missing {modules_root}")
+    by_address: dict[str, dict[str, Any]] = {}
+    invalid_json_files = 0
+    json_files_scanned = 0
+    occurrence_count = 0
+    for module_dir in sorted((p for p in modules_root.iterdir() if p.is_dir()), key=lambda p: p.name.lower()):
+        for json_path in (p for p in iter_module_files(module_dir) if p.suffix.lower() == ".json"):
+            try:
+                payload = json.loads(read_text(json_path, max_bytes=8_000_000))
+            except json.JSONDecodeError:
+                invalid_json_files += 1
+                continue
+            json_files_scanned += 1
+            relative = json_path.relative_to(module_dir).as_posix()
+            for occurrence in _leaf_occurrences(payload, path=relative):
+                occurrence_count += 1
+                address = f"{module_dir.name}::leaf::{occurrence['id']}"
+                entry = by_address.setdefault(address, {
+                    "address": address,
+                    "module": module_dir.name,
+                    "id": occurrence["id"],
+                    "levels": [],
+                    "occurrences": [],
+                    "status": "declared_not_exercised",
+                    "source_capability_execution": False,
+                })
+                if occurrence["level"] not in entry["levels"]:
+                    entry["levels"].append(occurrence["level"])
+                entry["occurrences"].append({key: occurrence[key] for key in ("path", "pointer", "declaration", "level")})
+    entries = sorted(by_address.values(), key=lambda item: item["address"].lower())
+    for entry in entries:
+        entry["levels"].sort()
+        entry["occurrences"].sort(key=lambda item: (item["path"].lower(), item["pointer"], item["declaration"]))
+    return {
+        "schema": "axm.monolith.leaf-capability-registry/v0.1",
+        "summary": {
+            "declared_leaf_capability_count": len(entries),
+            "declaration_occurrence_count": occurrence_count,
+            "json_files_scanned": json_files_scanned,
+            "invalid_json_files_skipped": invalid_json_files,
+            "source_callable_count": 0,
+        },
+        "entries": entries,
+        "truth_boundary": (
+            "A declared leaf ID is an exact machine-readable identifier with source provenance. "
+            "It is not automatically a callable function, unique implementation, verified capability, "
+            "permission, compatibility proof, merge authority, or CANON."
+        ),
+    }
+
+
+def stack_summary(modules,graph,human_queue,automated_queue,compositions,leaf_registry=None):
     capabilities=[cap for m in modules for cap in m["capabilities"]]; evidence_counts={}
     for cap in capabilities: evidence_counts[cap.get("evidence_status","unknown")]=evidence_counts.get(cap.get("evidence_status","unknown"),0)+1
-    return {"module_count":len(modules),"file_count":sum(m["file_count"] for m in modules),"total_bytes":sum(m["total_bytes"] for m in modules),"capability_count":len(capabilities),"capability_evidence":dict(sorted(evidence_counts.items())),"candidate_connection_count":graph["edge_count"],"candidate_composition_count":len(compositions),"human_test_module_count":len(human_queue),"discovered_test_command_count":len(automated_queue),"native_manifest_module_count":sum(1 for m in modules if m["native_manifest"])}
+    leaf_summary=(leaf_registry or {}).get("summary",{})
+    return {"module_count":len(modules),"file_count":sum(m["file_count"] for m in modules),"total_bytes":sum(m["total_bytes"] for m in modules),"capability_count":len(capabilities),"aggregate_capability_count":len(capabilities),"declared_leaf_capability_count":leaf_summary.get("declared_leaf_capability_count",0),"leaf_declaration_occurrence_count":leaf_summary.get("declaration_occurrence_count",0),"total_catalogued_capability_count":len(capabilities)+leaf_summary.get("declared_leaf_capability_count",0),"capability_evidence":dict(sorted(evidence_counts.items())),"candidate_connection_count":graph["edge_count"],"candidate_composition_count":len(compositions),"human_test_module_count":len(human_queue),"discovered_test_command_count":len(automated_queue),"native_manifest_module_count":sum(1 for m in modules if m["native_manifest"])}
 
 
 def write_json(path: Path,payload: Any)->None: path.parent.mkdir(parents=True,exist_ok=True); path.write_text(json.dumps(payload,indent=2,sort_keys=True)+"\n",encoding="utf-8")
@@ -336,12 +457,12 @@ def render_dashboard(analysis):
 def analyze_build(build_root: Path) -> dict[str,Any]:
     build_root=build_root.resolve(); modules_dir=build_root/"modules"
     if not modules_dir.is_dir(): raise ValueError(f"not an AXM monolith build: missing {modules_dir}")
-    modules=[module_profile(p) for p in sorted(modules_dir.iterdir(),key=lambda p:p.name.lower()) if p.is_dir()]; graph=build_connection_graph(modules); compositions=composition_candidates(graph); human_queue=human_test_queue(modules); automated_queue=automated_test_queue(modules); summary=stack_summary(modules,graph,human_queue,automated_queue,compositions)
+    modules=[module_profile(p) for p in sorted(modules_dir.iterdir(),key=lambda p:p.name.lower()) if p.is_dir()]; graph=build_connection_graph(modules); compositions=composition_candidates(graph); human_queue=human_test_queue(modules); automated_queue=automated_test_queue(modules); leaf_registry=build_leaf_capability_registry(build_root); summary=stack_summary(modules,graph,human_queue,automated_queue,compositions,leaf_registry)
     analysis={"schema_version":SCHEMA_VERSION,"summary":summary,"modules":modules,"graph":graph,"compositions":compositions,"human_test_queue":human_queue,"automated_test_queue":automated_queue,"truth_boundary":"This analysis distinguishes native declaration, structural detection, and inference. No candidate graph edge/composition is verified by analysis alone."}
     analysis_dir=build_root/"analysis"; analysis_dir.mkdir(exist_ok=True); per_module=analysis_dir/"modules"; per_module.mkdir(exist_ok=True)
     for module in modules: write_json(per_module/f"{module['module']}.json",module)
-    write_json(build_root/"STACK_ANALYSIS.json",analysis); write_json(build_root/"CAPABILITY_REGISTRY.json",{"schema_version":SCHEMA_VERSION,"capabilities":[{"module":m["module"],"repository":m["repository"],**cap} for m in modules for cap in m["capabilities"]]}); write_json(build_root/"CONNECTION_GRAPH.json",graph); write_json(build_root/"COMPOSITION_CANDIDATES.json",{"schema_version":SCHEMA_VERSION,"compositions":compositions}); write_json(build_root/"HUMAN_TEST_QUEUE.json",{"schema_version":SCHEMA_VERSION,"queue":human_queue}); write_json(build_root/"AUTOMATED_TEST_QUEUE.json",{"schema_version":SCHEMA_VERSION,"queue":automated_queue,"truth_boundary":"commands are discovered, not executed automatically"}); (build_root/"STACK_REPORT.md").write_text(render_report(analysis),encoding="utf-8"); (build_root/"OPEN_ME.html").write_text(render_dashboard(analysis),encoding="utf-8")
-    return {"summary":summary,"outputs":["OPEN_ME.html","STACK_REPORT.md","STACK_ANALYSIS.json","CAPABILITY_REGISTRY.json","CONNECTION_GRAPH.json","COMPOSITION_CANDIDATES.json","HUMAN_TEST_QUEUE.json","AUTOMATED_TEST_QUEUE.json","analysis/modules/"]}
+    write_json(build_root/"STACK_ANALYSIS.json",analysis); write_json(build_root/"CAPABILITY_REGISTRY.json",{"schema_version":SCHEMA_VERSION,"capabilities":[{"module":m["module"],"repository":m["repository"],**cap} for m in modules for cap in m["capabilities"]]}); write_json(build_root/"LEAF_CAPABILITY_REGISTRY.json",leaf_registry); write_json(build_root/"CONNECTION_GRAPH.json",graph); write_json(build_root/"COMPOSITION_CANDIDATES.json",{"schema_version":SCHEMA_VERSION,"compositions":compositions}); write_json(build_root/"HUMAN_TEST_QUEUE.json",{"schema_version":SCHEMA_VERSION,"queue":human_queue}); write_json(build_root/"AUTOMATED_TEST_QUEUE.json",{"schema_version":SCHEMA_VERSION,"queue":automated_queue,"truth_boundary":"commands are discovered, not executed automatically"}); (build_root/"STACK_REPORT.md").write_text(render_report(analysis),encoding="utf-8"); (build_root/"OPEN_ME.html").write_text(render_dashboard(analysis),encoding="utf-8")
+    return {"summary":summary,"outputs":["OPEN_ME.html","STACK_REPORT.md","STACK_ANALYSIS.json","CAPABILITY_REGISTRY.json","LEAF_CAPABILITY_REGISTRY.json","CONNECTION_GRAPH.json","COMPOSITION_CANDIDATES.json","HUMAN_TEST_QUEUE.json","AUTOMATED_TEST_QUEUE.json","analysis/modules/"]}
 
 
 def load_analysis(build_root: Path)->dict[str,Any]:

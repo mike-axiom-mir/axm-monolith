@@ -55,6 +55,21 @@ class SnapshotServerTests(unittest.TestCase):
             self.assertTrue(state.stress.start()["active"])
             self.assertFalse(state.stress.stop()["active"])
 
+    def test_execution_paths_are_snapshot_bounded(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp).resolve()
+            self.assertEqual(serve_snapshot.safe_snapshot_path(root, "outputs/test"), root / "outputs" / "test")
+            with self.assertRaisesRegex(ValueError, "escapes"):
+                serve_snapshot.safe_snapshot_path(root, "../outside")
+
+    def test_execution_receipt_sequence_is_monotonic(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "STACK_ANALYSIS.json").write_text(json.dumps({"modules": []}), encoding="utf-8")
+            state = serve_snapshot.ServerState(root)
+            self.assertEqual(state.next_execution_id(), 1)
+            self.assertEqual(state.next_execution_id(), 2)
+
 
 if __name__ == "__main__":
     unittest.main()

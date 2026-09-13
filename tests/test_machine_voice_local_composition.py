@@ -76,6 +76,11 @@ print(json.dumps(result, sort_keys=True, separators=(",", ":")))
 
 
 class MachineVoiceLocalCompositionTests(unittest.TestCase):
+    def held_config(self, base: Path) -> Path:
+        path = base / "held-assembly.json"
+        path.write_text(json.dumps({"build_enabled": False, "hold_reason": "bounded test hold"}), encoding="utf-8")
+        return path
+
     def make_fake_machine_voice(self, base: Path, mode: str) -> Path:
         root = base / "axm-machine-voice"
         root.mkdir(parents=True)
@@ -83,14 +88,14 @@ class MachineVoiceLocalCompositionTests(unittest.TestCase):
         launcher.write_text(FAKE_TEMPLATE.format(mode=mode), encoding="utf-8")
         return root
 
-    def test_real_checked_in_monolith_hold_reaches_external_machine_process(self):
+    def test_grounded_monolith_hold_reaches_external_machine_process(self):
         with TemporaryDirectory() as temp:
             temp_root = Path(temp)
             machine_voice = self.make_fake_machine_voice(temp_root, "emitted")
             output = temp_root / "evidence"
 
             result = run_local_composition(
-                config_path=ROOT / "config" / "assembly.json",
+                config_path=self.held_config(temp_root),
                 machine_voice_root=machine_voice,
                 output_dir=output,
             )
@@ -113,7 +118,7 @@ class MachineVoiceLocalCompositionTests(unittest.TestCase):
             temp_root = Path(temp)
             machine_voice = self.make_fake_machine_voice(temp_root, "duplicate")
             result = run_local_composition(
-                config_path=ROOT / "config" / "assembly.json",
+                config_path=self.held_config(temp_root),
                 machine_voice_root=machine_voice,
                 output_dir=temp_root / "evidence",
             )
@@ -138,11 +143,12 @@ class MachineVoiceLocalCompositionTests(unittest.TestCase):
 
     def test_missing_machine_voice_launcher_fails_closed_when_snapshot_exists(self):
         with TemporaryDirectory() as temp:
+            temp_root = Path(temp)
             with self.assertRaisesRegex(ValueError, "launcher not found"):
                 run_local_composition(
-                    config_path=ROOT / "config" / "assembly.json",
-                    machine_voice_root=Path(temp) / "missing",
-                    output_dir=Path(temp) / "evidence",
+                    config_path=self.held_config(temp_root),
+                    machine_voice_root=temp_root / "missing",
+                    output_dir=temp_root / "evidence",
                 )
 
     def test_unexpected_machine_voice_outcome_fails_closed(self):
@@ -151,7 +157,7 @@ class MachineVoiceLocalCompositionTests(unittest.TestCase):
             machine_voice = self.make_fake_machine_voice(temp_root, "no_candidate")
             with self.assertRaisesRegex(ValueError, "expected Machine Voice emission"):
                 run_local_composition(
-                    config_path=ROOT / "config" / "assembly.json",
+                    config_path=self.held_config(temp_root),
                     machine_voice_root=machine_voice,
                     output_dir=temp_root / "evidence",
                 )
@@ -162,7 +168,7 @@ class MachineVoiceLocalCompositionTests(unittest.TestCase):
             machine_voice = self.make_fake_machine_voice(temp_root, "wrong_protocol")
             with self.assertRaisesRegex(ValueError, "unexpected machine-channel protocol"):
                 run_local_composition(
-                    config_path=ROOT / "config" / "assembly.json",
+                    config_path=self.held_config(temp_root),
                     machine_voice_root=machine_voice,
                     output_dir=temp_root / "evidence",
                 )
@@ -179,7 +185,7 @@ class MachineVoiceLocalCompositionTests(unittest.TestCase):
             unrelated.write_text("keep", encoding="utf-8")
 
             run_local_composition(
-                config_path=ROOT / "config" / "assembly.json",
+                config_path=self.held_config(temp_root),
                 machine_voice_root=machine_voice,
                 output_dir=output,
                 reset_journal=True,

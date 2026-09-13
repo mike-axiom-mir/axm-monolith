@@ -55,10 +55,11 @@ class MachineVoiceLocalCompositionContractTests(unittest.TestCase):
             self.assertIn(name, runner)
         self.assertIn(".generated", runner)
 
-    def test_assembly_hold_remains_disabled(self):
+    def test_assembly_hold_is_released_but_confirmation_remains_required(self):
         config = json.loads((ROOT / "config" / "assembly.json").read_text(encoding="utf-8"))
-        self.assertIs(config["build_enabled"], False)
-        self.assertTrue(config["hold_reason"].strip())
+        self.assertIs(config["build_enabled"], True)
+        self.assertIsNone(config["hold_reason"])
+        self.assertTrue(config["finalization"]["package_requires_explicit_confirmation"])
 
 
 if __name__ == "__main__":

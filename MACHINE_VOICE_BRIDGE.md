@@ -31,7 +31,7 @@ python tools/export_machine_voice_state.py \
   --output .generated/machine-voice-composition/MACHINE_VOICE_NOTICE.json
 ```
 
-The current checked-in `config/assembly.json` has `build_enabled: false`, so the current repository state should produce a notice snapshot.
+The current checked-in `config/assembly.json` has `build_enabled: true`, so the current repository state normally produces no assembly-hold notice. If a future grounded hold sets `build_enabled: false` with a reason, the same exporter will surface it.
 
 Snapshot schema:
 

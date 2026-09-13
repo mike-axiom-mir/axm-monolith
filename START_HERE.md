@@ -12,21 +12,11 @@ The Assembly must preserve source identity while making the combined capability 
 
 A monolith is allowed to contain many modules. It is not allowed to pretend that separately evolved modules were always one codebase or that co-location proves compatibility.
 
-## Current hold
+## Current state
 
-**Do not create the first monolith yet.**
-
-The current growth batch still needs to be merged/reconciled. `config/assembly.json` keeps the materializing build path hard-disabled.
-
-Until Mike explicitly releases that hold:
-
-- do not set `build_enabled` to true;
-- do not run `build`;
-- do not commit generated stack lock files;
-- do not vendor current repository mains into this repository;
-- do not infer that today's public heads are the desired first test snapshot.
-
-Work on the assembler/inspector itself is allowed if it preserves the hold.
+The first-build hold has been released after a real snapshot and Blackline workflow experiment.
+Builds remain explicit: `--confirm-build` is required, exact heads are pinned before capture,
+generated modules remain outside this repository, and no source repository is modified.
 
 ## What is already prepared
 
@@ -155,9 +145,7 @@ Do not:
 
 `tools/inspect_stack.py route` — offline; finds a candidate graph route and labels it unverified.
 
-## First real experiment, later
-
-When Mike explicitly releases the hold:
+## Repeatable build and connected-package experiment
 
 1. run `discover` and inspect exclusions/rejections;
 2. run `plan` and preserve the output for review;
@@ -165,8 +153,11 @@ When Mike explicitly releases the hold:
 4. open `OPEN_ME.html`;
 5. inspect the full capability/evidence/connection surface;
 6. use the human-test queue instead of manually hunting across every repo;
-7. test selected candidate compositions;
-8. feed real repairs back to the owning source repos rather than silently forking them in the monolith.
+7. use `tools/finalize_connected_snapshot.py` to require selected execution evidence and package;
+8. test selected candidate compositions;
+9. feed real repairs back to the owning source repos rather than silently forking them in the monolith.
+
+See [`CONNECTED_FINALIZATION.md`](CONNECTED_FINALIZATION.md).
 
 ## Constitutional boundary
 

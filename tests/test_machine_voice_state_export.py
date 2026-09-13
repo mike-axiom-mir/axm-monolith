@@ -14,43 +14,15 @@ SPEC.loader.exec_module(MODULE)
 
 
 class MachineVoiceStateExportTests(unittest.TestCase):
-    def test_checked_in_assembly_config_emits_real_grounded_notice_snapshot(self):
+    def test_checked_in_enabled_assembly_config_is_normal_silence(self):
         config_path = ROOT / "config" / "assembly.json"
         config = json.loads(config_path.read_text(encoding="utf-8"))
-        self.assertIs(config["build_enabled"], False)
-        self.assertTrue(config["hold_reason"].strip())
-
-        snapshot = MODULE.export_from_config(config_path)
-        self.assertIsNotNone(snapshot)
-        self.assertEqual(snapshot["schema"], "axm-machine-voice/notice-snapshot/0.1")
-        self.assertEqual(snapshot["source"], {"kind": "module", "id": "axm-monolith"})
-        self.assertEqual(snapshot["activity"], {"kind": "activity", "id": "assembly-control"})
-        self.assertEqual(snapshot["next_operations"], ["inspect"])
-
-        signal = snapshot["signal"]
-        self.assertIs(signal["triggered"], True)
-        self.assertEqual(signal["observation"], {"kind": "observation", "id": "assembly-build-held"})
-        self.assertEqual(signal["rule"], {"kind": "notice-rule", "id": "assembly-build-hold-active-v0.1"})
-        self.assertEqual(
-            signal["observation_evidence"],
-            {"kind": "evidence", "id": "config-assembly-json-build-enabled-false"},
-        )
-        self.assertEqual(set(snapshot), {"schema", "event_id", "source", "activity", "signal", "next_operations"})
-        self.assertEqual(
-            set(signal),
-            {
-                "observation",
-                "rule",
-                "subjects",
-                "triggered",
-                "observation_evidence",
-                "rule_evidence",
-                "trigger_evidence",
-            },
-        )
+        self.assertIs(config["build_enabled"], True)
+        self.assertIsNone(config["hold_reason"])
+        self.assertIsNone(MODULE.export_from_config(config_path))
 
     def test_enabled_build_is_normal_silence(self):
-        config = {"build_enabled": True, "hold_reason": "not relevant while enabled"}
+        config = {"build_enabled": True, "hold_reason": None}
         self.assertIsNone(MODULE.build_assembly_hold_notice(config))
 
     def test_false_build_requires_explicit_reason(self):

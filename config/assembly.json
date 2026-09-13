@@ -27,6 +27,13 @@
     "auto_execute_discovered_tests": false,
     "generate_offline_dashboard": true
   },
-  "build_enabled": false,
-  "hold_reason": "Do not capture current mains yet; first merge/reconcile the current growth batch, then explicitly enable assembly for the chosen snapshot moment."
+  "build_enabled": true,
+  "hold_reason": null,
+  "finalization": {
+    "automatic_plumbing": true,
+    "package_requires_explicit_confirmation": true,
+    "candidate_edges_count_as_execution": false,
+    "declared_leaf_ids_count_as_execution": false,
+    "required_workflows_must_have_accepted_receipts": true
+  }
 }

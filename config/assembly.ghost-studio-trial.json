@@ -32,6 +32,6 @@
   "experiment": {
     "id": "ghost-studio-asset-trial-v0.1",
     "authorization": "Explicit user request on 2026-09-12 to assemble the current public AXM stack and test it by creating assets for Ghost Studio.",
-    "boundary": "This releases only the named experimental snapshot. It does not change the default assembly hold or source-repository authority."
+    "boundary": "This names the Ghost Studio trial while using the same released, explicit-confirmation assembly path as the default configuration. It does not change source-repository authority."
   }
 }

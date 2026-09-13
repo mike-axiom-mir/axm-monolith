@@ -1,8 +1,11 @@
 import importlib.util
+import io
 import json
 from pathlib import Path
 import tempfile
 import unittest
+from unittest import mock
+import urllib.error
 
 MODULE_PATH = Path(__file__).resolve().parents[1] / "tools" / "assemble.py"
 spec = importlib.util.spec_from_file_location("assemble", MODULE_PATH)
@@ -87,6 +90,84 @@ class AssemblyBoundaryTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             with self.assertRaises(assemble.AssemblyError):
                 assemble.build_monolith(held, Path(tmp) / "out", confirm=True)
+
+    def test_build_runs_repository_owned_plumbing_after_analysis(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            output = Path(tmp) / "out"
+            plan = {
+                "schema_version": "0.3",
+                "modules": [{
+                    "name": "demo",
+                    "full_name": "mike-axiom-mir/demo",
+                    "clone_url": "https://github.com/mike-axiom-mir/demo.git",
+                    "default_branch": "main",
+                    "commit": "a" * 40,
+                }],
+            }
+            with (
+                mock.patch.object(assemble, "resolve_plan", return_value=plan),
+                mock.patch.object(assemble, "materialize_module", return_value={
+                    "repository": "mike-axiom-mir/demo",
+                    "commit": "a" * 40,
+                    "path": "modules/demo",
+                    "materialized": True,
+                }),
+                mock.patch.object(assemble, "run_stack_analysis", return_value={"summary": {"module_count": 1}}) as analysis,
+                mock.patch.object(assemble, "run_snapshot_plumbing", return_value={"status": "installed"}) as plumbing,
+            ):
+                manifest = assemble.build_monolith(self.config, output, confirm=True)
+            analysis.assert_called_once_with(output)
+            plumbing.assert_called_once_with(output, refresh_analysis=False)
+            self.assertEqual(manifest["plumbing"]["status"], "installed")
+
+    def test_github_api_retries_transient_server_error(self):
+        payload = b'{"ok": true}'
+        response = mock.MagicMock()
+        response.__enter__.return_value.read.return_value = payload
+        response.__exit__.return_value = False
+        failure = urllib.error.HTTPError(
+            "https://api.github.com/example", 502, "temporary", {}, io.BytesIO(b"temporary")
+        )
+        opener = mock.Mock(side_effect=[failure, response])
+        sleeper = mock.Mock()
+
+        result = assemble.api_get_json(
+            "https://api.github.com/example", attempts=2, opener=opener, sleeper=sleeper
+        )
+
+        self.assertEqual(result, {"ok": True})
+        self.assertEqual(opener.call_count, 2)
+        sleeper.assert_called_once_with(0.5)
+
+    def test_github_api_does_not_retry_non_transient_error(self):
+        failure = urllib.error.HTTPError(
+            "https://api.github.com/example", 404, "missing", {}, io.BytesIO(b"missing")
+        )
+        opener = mock.Mock(side_effect=failure)
+        sleeper = mock.Mock()
+
+        with self.assertRaisesRegex(assemble.AssemblyError, "after 1 attempt"):
+            assemble.api_get_json(
+                "https://api.github.com/example", attempts=4, opener=opener, sleeper=sleeper
+            )
+
+        opener.assert_called_once()
+        sleeper.assert_not_called()
+
+    def test_plan_falls_back_to_git_and_keeps_deterministic_order(self):
+        repos = [self.repo("z-module"), self.repo("a-module")]
+
+        def getter(url, _token):
+            if "/users/" in url:
+                return repos
+            raise assemble.AssemblyError("temporary API failure")
+
+        with mock.patch.object(assemble, "run_git", return_value=("b" * 40) + "\trefs/heads/main"):
+            plan = assemble.resolve_plan(self.config, getter=getter)
+
+        self.assertEqual([item["name"] for item in plan["modules"]], ["a-module", "z-module"])
+        self.assertTrue(all(item["commit"] == "b" * 40 for item in plan["modules"]))
+        self.assertTrue(all(item["head_resolution"] == "git-ls-remote-fallback" for item in plan["modules"]))
 
 
 if __name__ == "__main__":

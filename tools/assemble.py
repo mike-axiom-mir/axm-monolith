@@ -16,6 +16,7 @@ browser-facing surfaces.
 from __future__ import annotations
 
 import argparse
+from concurrent.futures import ThreadPoolExecutor, as_completed
 import datetime as dt
 import json
 import os
@@ -23,6 +24,7 @@ from pathlib import Path
 import shutil
 import subprocess
 import sys
+import time
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -49,7 +51,18 @@ def load_config(path: Path) -> dict[str, Any]:
     return config
 
 
-def api_get_json(url: str, token: str | None = None) -> Any:
+def api_get_json(
+    url: str,
+    token: str | None = None,
+    *,
+    attempts: int = 4,
+    timeout_seconds: float = 30.0,
+    opener: Callable[..., Any] = urllib.request.urlopen,
+    sleeper: Callable[[float], None] = time.sleep,
+) -> Any:
+    """Read GitHub JSON with bounded retries for transient transport failures."""
+    if attempts < 1:
+        raise AssemblyError("GitHub API attempts must be at least one")
     headers = {
         "Accept": "application/vnd.github+json",
         "User-Agent": USER_AGENT,
@@ -57,15 +70,31 @@ def api_get_json(url: str, token: str | None = None) -> Any:
     }
     if token:
         headers["Authorization"] = f"Bearer {token}"
-    request = urllib.request.Request(url, headers=headers)
-    try:
-        with urllib.request.urlopen(request, timeout=30) as response:
-            return json.loads(response.read().decode("utf-8"))
-    except urllib.error.HTTPError as exc:
-        detail = exc.read().decode("utf-8", errors="replace")
-        raise AssemblyError(f"GitHub API error {exc.code} for {url}: {detail}") from exc
-    except urllib.error.URLError as exc:
-        raise AssemblyError(f"GitHub API unavailable for {url}: {exc}") from exc
+    retryable_statuses = {429, 500, 502, 503, 504}
+    for attempt in range(1, attempts + 1):
+        request = urllib.request.Request(url, headers=headers)
+        try:
+            with opener(request, timeout=timeout_seconds) as response:
+                return json.loads(response.read().decode("utf-8"))
+        except urllib.error.HTTPError as exc:
+            detail = exc.read().decode("utf-8", errors="replace")
+            if exc.code not in retryable_statuses or attempt == attempts:
+                raise AssemblyError(
+                    f"GitHub API error {exc.code} for {url} after {attempt} attempt(s): {detail}"
+                ) from exc
+            retry_after = exc.headers.get("Retry-After") if exc.headers else None
+            try:
+                delay = min(float(retry_after), 8.0) if retry_after else min(0.5 * (2 ** (attempt - 1)), 4.0)
+            except ValueError:
+                delay = min(0.5 * (2 ** (attempt - 1)), 4.0)
+            sleeper(delay)
+        except (urllib.error.URLError, TimeoutError) as exc:
+            if attempt == attempts:
+                raise AssemblyError(
+                    f"GitHub API unavailable for {url} after {attempt} attempt(s): {exc}"
+                ) from exc
+            sleeper(min(0.5 * (2 ** (attempt - 1)), 4.0))
+    raise AssemblyError(f"GitHub API unavailable for {url}")
 
 
 def exclusion_map(config: dict[str, Any]) -> dict[str, str]:
@@ -161,16 +190,40 @@ def resolve_plan(
 ) -> dict[str, Any]:
     token = os.environ.get("GITHUB_TOKEN")
     eligible, rejected = discover_public_repositories(config, getter=getter)
-    modules: list[dict[str, Any]] = []
-    for repo in eligible:
+
+    def resolve_head(repo: dict[str, Any]) -> dict[str, Any]:
         full = repo["full_name"]
         branch = urllib.parse.quote(repo["default_branch"], safe="")
         url = f"{API_ROOT}/repos/{full}/commits/{branch}"
-        commit = getter(url, token)
-        sha = str((commit or {}).get("sha", ""))
+        method = "github-api"
+        try:
+            commit = getter(url, token)
+            sha = str((commit or {}).get("sha", ""))
+        except AssemblyError as api_error:
+            try:
+                ref = f"refs/heads/{repo['default_branch']}"
+                line = run_git(["ls-remote", "--refs", repo["clone_url"], ref])
+                sha = line.split(maxsplit=1)[0] if line else ""
+                method = "git-ls-remote-fallback"
+            except AssemblyError as git_error:
+                raise AssemblyError(
+                    f"could not resolve exact default-branch head for {full}; "
+                    f"API failed ({api_error}); Git fallback failed ({git_error})"
+                ) from git_error
         if len(sha) != 40:
             raise AssemblyError(f"could not resolve exact default-branch head for {full}")
-        modules.append({**repo, "commit": sha})
+        return {**repo, "commit": sha, "head_resolution": method}
+
+    configured_workers = config.get("selection", {}).get("plan_workers", 8)
+    if not isinstance(configured_workers, int) or not 1 <= configured_workers <= 16:
+        raise AssemblyError("selection.plan_workers must be an integer between 1 and 16")
+    by_name: dict[str, dict[str, Any]] = {}
+    with ThreadPoolExecutor(max_workers=min(configured_workers, max(1, len(eligible)))) as executor:
+        futures = {executor.submit(resolve_head, repo): repo["full_name"] for repo in eligible}
+        for future in as_completed(futures):
+            module = future.result()
+            by_name[module["full_name"]] = module
+    modules = [by_name[repo["full_name"]] for repo in eligible]
 
     return {
         "schema_version": "0.3",
@@ -180,7 +233,7 @@ def resolve_plan(
         "module_count": len(modules),
         "modules": modules,
         "excluded_or_rejected": rejected,
-        "truth_boundary": "plan contains only public owner repositories that passed the configured selection boundary; no source repository was modified",
+        "truth_boundary": "plan contains only public owner repositories that passed the configured selection boundary; every module has an exact SHA; no source repository was modified",
     }
 
 
@@ -248,6 +301,17 @@ def run_stack_analysis(output: Path) -> dict[str, Any]:
         raise AssemblyError(f"stack analysis/user-surface generation failed after materialization: {exc}") from exc
 
 
+def run_snapshot_plumbing(output: Path, *, refresh_analysis: bool = False) -> dict[str, Any]:
+    try:
+        from monolith_plumbing import plumb_snapshot
+    except ImportError as exc:
+        raise AssemblyError("monolith plumbing is missing; tools/monolith_plumbing.py must be present") from exc
+    try:
+        return plumb_snapshot(output, refresh_analysis=refresh_analysis)
+    except (ValueError, OSError, json.JSONDecodeError, RuntimeError) as exc:
+        raise AssemblyError(f"snapshot plumbing failed after materialization: {exc}") from exc
+
+
 def build_monolith(config: dict[str, Any], output: Path, confirm: bool) -> dict[str, Any]:
     if not bool(config.get("build_enabled", False)):
         raise AssemblyError("build is currently disabled by config hold; finish/reconcile the growth merge batch before enabling it")
@@ -291,6 +355,7 @@ def build_monolith(config: dict[str, Any], output: Path, confirm: bool) -> dict[
 
     if bool(config.get("analysis", {}).get("enabled", True)):
         manifest["analysis"] = run_stack_analysis(output)
+        manifest["plumbing"] = run_snapshot_plumbing(output, refresh_analysis=False)
         with (output / "MONOLITH_MANIFEST.json").open("w", encoding="utf-8") as handle:
             json.dump(manifest, handle, indent=2, sort_keys=True)
             handle.write("\n")
@@ -301,7 +366,9 @@ def build_monolith(config: dict[str, Any], output: Path, confirm: bool) -> dict[
 def inspect_existing_build(path: Path) -> dict[str, Any]:
     if not (path / "modules").is_dir():
         raise AssemblyError(f"missing modules directory in build: {path}")
-    return run_stack_analysis(path)
+    analysis = run_stack_analysis(path)
+    plumbing = run_snapshot_plumbing(path, refresh_analysis=False)
+    return {"analysis": analysis, "plumbing": plumbing}
 
 
 def build_parser() -> argparse.ArgumentParser:

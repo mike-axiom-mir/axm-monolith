@@ -10,13 +10,13 @@ Its job is **not** to become another development home and it is **not** allowed 
 
 ## Current status
 
-**Assembler + deterministic capability inspector + reusable Pipeline Fabric are ready. No monolith snapshot has been created yet.**
+**The first real assembly has been exercised. New builds now install their discovery, callable, workflow, one-launch, evidence, and packaging plumbing automatically.**
 
-The first real assembly remains intentionally deferred until the current growth work has been reviewed/merged. `config/assembly.json` keeps `build_enabled` set to `false`, so even an explicit `--confirm-build` is rejected until the hold is deliberately released.
+`config/assembly.json` enables deliberate builds. A build still requires `--confirm-build`, remains public-only, pins exact source SHAs, preserves module namespaces, and does not modify source repositories.
 
 Pipeline Fabric is a post-analysis capability. It consumes an existing `STACK_ANALYSIS.json` and exports a capability-level graph, bounded candidate pipelines, goal queries, and explicit gap/adapter leads for this exact snapshot. It does not execute pipelines or create authority.
 
-The monolith can also export its **real checked-in assembly-control state** into AXM Machine Voice's strict notice snapshot format without releasing the assembly hold. The first rule reports only that an explicit assembly hold is active; it does not label that state good, bad, important, anomalous, or failed.
+The monolith can also export its **real checked-in assembly-control state** into AXM Machine Voice's strict notice snapshot format. The current enabled state emits normal silence; if a future explicit hold is recorded, the first rule reports only that hold without labelling it good, bad, important, anomalous, or failed.
 
 A one-command local composition runner is also ready. When `axm-machine-voice` is physically present as a sibling (or explicitly selected path), it exports the real state, invokes the real Machine Voice zero-install channel, preserves a local communication journal, and writes explicit composition evidence. Repository CI tests that orchestration with a fake external process only; real cross-repository runtime evidence still requires the local/staged command. See [`MACHINE_VOICE_BRIDGE.md`](MACHINE_VOICE_BRIDGE.md).
 
@@ -50,15 +50,18 @@ voice      -> export explicit monolith state into a strict Machine Voice snapsho
 voice-test -> locally exercise that snapshot through a real Machine Voice checkout
 ```
 
-Nothing runs automatically.
+Nothing materializes or executes source capabilities without an explicit command. Once a build
+is explicitly confirmed, its non-source-executing plumbing pass runs automatically so the
+snapshot cannot be packaged before registries, runtimes, launchers, and truth labels exist.
 
-## What one future build does
+## What one confirmed build does
 
-After the hold is released and a build is explicitly requested, The Assembly will:
+When a build is explicitly requested, The Assembly will:
 
 1. discover only eligible public owner repositories;
 2. apply explicit exclusions;
-3. resolve exact current default-branch SHAs;
+3. resolve exact current default-branch SHAs with bounded parallel API requests,
+   transient retries, and a read-only Git fallback;
 4. write `axm-stack.lock.json`;
 5. materialize every pinned repo under `modules/<repo>`;
 6. preserve per-module source/provenance;
@@ -67,7 +70,10 @@ After the hold is released and a build is explicitly requested, The Assembly wil
 9. map candidate cross-module interfaces without pretending they are verified;
 10. derive bounded candidate composition chains;
 11. produce a machine test-command queue and a separate human-test queue;
-12. generate a dependency-free offline dashboard: **`OPEN_ME.html`**.
+12. generate a dependency-free offline dashboard: **`OPEN_ME.html`**;
+13. inventory exact declared leaf IDs separately from broad capability labels;
+14. export candidate pipelines and a native callable registry;
+15. install bounded invocation/ledger runtimes and one local front door.
 
 The generated build will contain:
 
@@ -84,6 +90,11 @@ CONNECTION_GRAPH.json
 COMPOSITION_CANDIDATES.json
 HUMAN_TEST_QUEUE.json
 AUTOMATED_TEST_QUEUE.json
+LEAF_CAPABILITY_REGISTRY.json
+CALLABLE_CAPABILITY_REGISTRY.json
+PLUMBING_RECEIPT.json
+START_AXM.cmd
+START_AXM.sh
 
 analysis/modules/<repo>.json
 modules/<repo>/...
@@ -99,6 +110,8 @@ PIPELINE_GAPS.json
 ```
 
 So the first thing Mike needs to do after assembly is simply open `OPEN_ME.html`. Machines or later AXM systems can consume the machine-readable registry/graph/pipeline files directly.
+
+For a release ZIP, use the evidence-gated finalizer in [`CONNECTED_FINALIZATION.md`](CONNECTED_FINALIZATION.md). It refuses to call a package connected merely because files share a folder or a graph has edges.
 
 ## Capability truth model
 
@@ -156,7 +169,7 @@ Read-only exact-head plan:
 python tools/assemble.py plan
 ```
 
-Future build, only after the hold is deliberately released:
+Deliberate build with automatic plumbing:
 
 ```bash
 python tools/assemble.py build \
@@ -263,6 +276,7 @@ Future builders should read:
 9. [`tools/pipeline_fabric.py`](tools/pipeline_fabric.py)
 10. [`tools/export_machine_voice_state.py`](tools/export_machine_voice_state.py)
 11. [`tools/test_machine_voice_composition.py`](tools/test_machine_voice_composition.py)
-12. [`NEXT_BUILD.md`](NEXT_BUILD.md)
+12. [`CONNECTED_FINALIZATION.md`](CONNECTED_FINALIZATION.md)
+13. [`NEXT_BUILD.md`](NEXT_BUILD.md)
 
-The first real snapshot still comes **after** the growth merge batch. Until then, build capability stays hard-disabled.
+The obsolete first-build hold is released. Every future snapshot must still be explicitly confirmed and preserve its exact source lock and evidence boundary.

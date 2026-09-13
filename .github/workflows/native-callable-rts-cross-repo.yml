@@ -1,0 +1,71 @@
+name: Native callable RTS cross-repo discovery
+
+on:
+  pull_request:
+    branches:
+      - main
+    paths:
+      - '.github/workflows/native-callable-rts-cross-repo.yml'
+      - 'tools/callable_registry.py'
+      - 'schemas/AXM_CALLABLE.schema.json'
+      - 'schemas/AXM_MODULE.schema.json'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  discover-rts-callables:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - name: Check out exact Monolith candidate
+        uses: actions/checkout@v4
+
+      - name: Use Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Materialize exact merged Global State RTS source module
+        uses: actions/checkout@v4
+        with:
+          repository: mike-axiom-mir/axm-global-state-rts
+          ref: 485303329fae5839215bad9e469b2d83b1b1f109
+          path: snapshot/modules/axm-global-state-rts
+
+      - name: Discover source-declared callables without hard-coded bindings
+        run: |
+          python tools/callable_registry.py snapshot --strict
+          python - <<'PY'
+          import json
+          from pathlib import Path
+
+          registry = json.loads(Path('snapshot/CALLABLE_CAPABILITY_REGISTRY.json').read_text())
+          assert registry['schema'] == 'axm.monolith.callable-capability-registry/v0.1'
+          assert registry['summary']['callable_declaration_count'] == 2
+          assert registry['summary']['declared_callable_not_exercised'] == 2
+          assert registry['summary']['blocked_invalid_callable_declaration'] == 0
+
+          entries = {entry['capability']: entry for entry in registry['entries']}
+          assert set(entries) == {'asset.workshop-lod-selection', 'asset.workshop-lod-installation'}
+          assert entries['asset.workshop-lod-selection']['callable']['export'] == 'selectWorkshopRuntimeLod'
+          assert entries['asset.workshop-lod-installation']['callable']['export'] == 'installWorkshopLodForView'
+          for entry in entries.values():
+              assert entry['status'] == 'declared_callable_not_exercised'
+              assert entry['source_capability_execution'] is False
+              assert entry['callable']['authority'] == 'none'
+              assert entry['errors'] == []
+
+          tool = Path('tools/callable_registry.py').read_text()
+          assert 'axm-global-state-rts' not in tool, 'registry implementation must not hard-code the donor module'
+          print(json.dumps(registry['summary'], sort_keys=True))
+          PY
+
+      - name: Preserve cross-repo discovery receipt
+        uses: actions/upload-artifact@v4
+        with:
+          name: native-callable-rts-discovery
+          path: snapshot/CALLABLE_CAPABILITY_REGISTRY.json
+          if-no-files-found: error
+          retention-days: 14

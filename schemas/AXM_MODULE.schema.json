@@ -33,6 +33,34 @@
                 "type": "object",
                 "properties": {"status": {"type": "string"}},
                 "additionalProperties": true
+              },
+              "callable": {
+                "type": "object",
+                "required": ["schema", "kind", "runtime", "authority"],
+                "properties": {
+                  "schema": {"const": "axm.callable-capability/v0.1"},
+                  "kind": {"enum": ["module-export", "command"]},
+                  "runtime": {"type": "string", "minLength": 1},
+                  "path": {"type": "string", "minLength": 1},
+                  "export": {"type": "string", "minLength": 1},
+                  "command": {"type": "string", "minLength": 1},
+                  "input_contract": {"type": "string", "minLength": 1},
+                  "output_contract": {"type": "string", "minLength": 1},
+                  "authority": {"const": "none"},
+                  "network": {"enum": ["none", "declared"]},
+                  "notes": {"type": "string"}
+                },
+                "allOf": [
+                  {
+                    "if": {"properties": {"kind": {"const": "module-export"}}},
+                    "then": {"required": ["path", "export"]}
+                  },
+                  {
+                    "if": {"properties": {"kind": {"const": "command"}}},
+                    "then": {"required": ["command"]}
+                  }
+                ],
+                "additionalProperties": false
               }
             },
             "additionalProperties": true

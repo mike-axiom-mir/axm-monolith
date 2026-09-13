@@ -1,0 +1,32 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/mike-axiom-mir/axm-monolith/blob/main/schemas/AXM_CALLABLE.schema.json",
+  "title": "AXM Declared Callable Capability Descriptor",
+  "description": "A source declaration that identifies a possible callable surface. Declaration is not execution evidence, authorization, or interoperability proof.",
+  "type": "object",
+  "required": ["schema", "kind", "runtime", "authority"],
+  "properties": {
+    "schema": {"const": "axm.callable-capability/v0.1"},
+    "kind": {"enum": ["module-export", "command"]},
+    "runtime": {"type": "string", "minLength": 1},
+    "path": {"type": "string", "minLength": 1},
+    "export": {"type": "string", "minLength": 1},
+    "command": {"type": "string", "minLength": 1},
+    "input_contract": {"type": "string", "minLength": 1},
+    "output_contract": {"type": "string", "minLength": 1},
+    "authority": {"const": "none"},
+    "network": {"enum": ["none", "declared"]},
+    "notes": {"type": "string"}
+  },
+  "allOf": [
+    {
+      "if": {"properties": {"kind": {"const": "module-export"}}},
+      "then": {"required": ["path", "export"]}
+    },
+    {
+      "if": {"properties": {"kind": {"const": "command"}}},
+      "then": {"required": ["command"]}
+    }
+  ],
+  "additionalProperties": false
+}

@@ -1,4 +1,4 @@
-name: Native callable RTS cross-repo discovery
+name: Native callable RTS cross-repo discovery and invocation
 
 on:
   pull_request:
@@ -7,6 +7,8 @@ on:
     paths:
       - '.github/workflows/native-callable-rts-cross-repo.yml'
       - 'tools/callable_registry.py'
+      - 'tools/invoke_declared_callable.py'
+      - 'tools/js_callable_runner.mjs'
       - 'schemas/AXM_CALLABLE.schema.json'
       - 'schemas/AXM_MODULE.schema.json'
   workflow_dispatch:
@@ -15,7 +17,7 @@ permissions:
   contents: read
 
 jobs:
-  discover-rts-callables:
+  discover-and-invoke-rts-callable:
     runs-on: ubuntu-latest
     timeout-minutes: 8
     steps:
@@ -26,6 +28,11 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: '3.11'
+
+      - name: Use Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
 
       - name: Materialize exact merged Global State RTS source module
         uses: actions/checkout@v4
@@ -57,15 +64,68 @@ jobs:
               assert entry['callable']['authority'] == 'none'
               assert entry['errors'] == []
 
-          tool = Path('tools/callable_registry.py').read_text()
-          assert 'axm-global-state-rts' not in tool, 'registry implementation must not hard-code the donor module'
-          print(json.dumps(registry['summary'], sort_keys=True))
+          registry_tool = Path('tools/callable_registry.py').read_text()
+          invoker_tool = Path('tools/invoke_declared_callable.py').read_text()
+          assert 'axm-global-state-rts' not in registry_tool
+          assert 'axm-global-state-rts' not in invoker_tool
           PY
 
-      - name: Preserve cross-repo discovery receipt
+      - name: Explicitly invoke only the pure LOD selector at 360 m and 90 m
+        run: |
+          mkdir -p snapshot/evidence/native-callable
+          printf '%s\n' '{"schema":"axm.callable-invocation-request/v0.1","args":[360]}' > snapshot/evidence/native-callable/request-360.json
+          printf '%s\n' '{"schema":"axm.callable-invocation-request/v0.1","args":[90]}' > snapshot/evidence/native-callable/request-90.json
+
+          python tools/invoke_declared_callable.py \
+            snapshot \
+            'axm-global-state-rts::asset.workshop-lod-selection' \
+            --request snapshot/evidence/native-callable/request-360.json \
+            --receipt snapshot/evidence/native-callable/receipt-360.json \
+            --allow-javascript-esm
+
+          python tools/invoke_declared_callable.py \
+            snapshot \
+            'axm-global-state-rts::asset.workshop-lod-selection' \
+            --request snapshot/evidence/native-callable/request-90.json \
+            --receipt snapshot/evidence/native-callable/receipt-90.json \
+            --allow-javascript-esm
+
+          python - <<'PY'
+          import json
+          from pathlib import Path
+
+          r360 = json.loads(Path('snapshot/evidence/native-callable/receipt-360.json').read_text())
+          r90 = json.loads(Path('snapshot/evidence/native-callable/receipt-90.json').read_text())
+          for receipt in (r360, r90):
+              assert receipt['status'] == 'exercised_with_receipt'
+              assert receipt['source_capability_execution'] is True
+              assert receipt['address'] == 'axm-global-state-rts::asset.workshop-lod-selection'
+              assert receipt['declared_callable']['authority'] == 'none'
+              for key in ('manifest_sha256', 'source_file_sha256', 'request_sha256', 'response_sha256'):
+                  assert receipt[key].startswith('sha256:') and len(receipt[key]) == 71
+
+          assert r360['result']['distanceM'] == 360
+          assert r360['result']['role'] == 'rts'
+          assert r360['result']['farCandidateStatus'] == 'HOLD_DISTANCE_HANDOFF_UNPROVEN'
+          assert r90['result']['distanceM'] == 90
+          assert r90['result']['role'] == 'tactical'
+
+          registry = json.loads(Path('snapshot/CALLABLE_CAPABILITY_REGISTRY.json').read_text())
+          installer = next(entry for entry in registry['entries'] if entry['capability'] == 'asset.workshop-lod-installation')
+          assert installer['status'] == 'declared_callable_not_exercised'
+          assert installer['source_capability_execution'] is False
+          print('generic source-declared invocation: PASS (selection exercised; host-callback installer remains declared only)')
+          PY
+
+      - name: Preserve cross-repo discovery and invocation receipts
         uses: actions/upload-artifact@v4
         with:
-          name: native-callable-rts-discovery
-          path: snapshot/CALLABLE_CAPABILITY_REGISTRY.json
+          name: native-callable-rts-discovery-and-invocation
+          path: |
+            snapshot/CALLABLE_CAPABILITY_REGISTRY.json
+            snapshot/evidence/native-callable/request-360.json
+            snapshot/evidence/native-callable/request-90.json
+            snapshot/evidence/native-callable/receipt-360.json
+            snapshot/evidence/native-callable/receipt-90.json
           if-no-files-found: error
           retention-days: 14

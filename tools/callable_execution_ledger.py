@@ -23,6 +23,23 @@ REGISTRY_SCHEMA = "axm.monolith.callable-capability-registry/v0.1"
 RECEIPT_SCHEMA = "axm.monolith.callable-invocation-receipt/v0.1"
 SHA256_PREFIX = "sha256:"
 
+SOURCE_ATTEMPT_STATUSES = {
+    "exercised_with_receipt",
+    "source_execution_timeout",
+    "source_execution_invalid_response",
+    "source_execution_failed",
+}
+PRE_EXECUTION_BLOCK_STATUSES = {
+    "blocked_registry_entry_not_callable",
+    "blocked_callable_authority_claim",
+    "blocked_unsupported_callable_kind",
+    "blocked_unsupported_callable_runtime",
+    "blocked_explicit_execution_opt_in_required",
+    "blocked_invalid_invocation_request",
+    "blocked_missing_javascript_runtime",
+}
+KNOWN_RECEIPT_STATUSES = SOURCE_ATTEMPT_STATUSES | PRE_EXECUTION_BLOCK_STATUSES
+
 
 class LedgerError(RuntimeError):
     pass
@@ -116,37 +133,12 @@ def _source_file(snapshot: Path, entry: dict[str, Any], receipt: dict[str, Any])
     return target
 
 
-def _validate_receipt(snapshot: Path, registry_by_address: dict[str, dict[str, Any]], receipt: Any) -> tuple[str, list[str], dict[str, Any] | None]:
-    errors: list[str] = []
-    if not isinstance(receipt, dict):
-        return "blocked_invalid_receipt", ["receipt must be an object"], None
-    if receipt.get("schema") != RECEIPT_SCHEMA:
-        return "ignored_non_receipt", [], None
-
-    address = receipt.get("address")
-    entry = registry_by_address.get(address) if isinstance(address, str) else None
-    if entry is None:
-        errors.append("receipt address does not exist exactly once in callable registry")
-        return "blocked_receipt_registry_mismatch", errors, None
-
+def _validate_source_identity(snapshot: Path, entry: dict[str, Any], receipt: dict[str, Any], errors: list[str]) -> None:
     descriptor = entry.get("callable") or {}
-    if entry.get("status") != "declared_callable_not_exercised" or entry.get("errors"):
-        errors.append("registry entry is not a valid declared callable")
-    if receipt.get("module") != entry.get("module") or receipt.get("capability") != entry.get("capability"):
-        errors.append("receipt module/capability identity does not match registry address")
-    if receipt.get("manifest_sha256") != entry.get("manifest_sha256"):
-        errors.append("receipt manifest hash does not match registry manifest hash")
-    if not _valid_sha256(receipt.get("manifest_sha256")):
-        errors.append("receipt manifest hash is not a valid SHA-256 identity")
-
-    runtime = descriptor.get("runtime")
-    export = descriptor.get("export")
-    if receipt.get("runtime") != runtime:
+    if receipt.get("runtime") != descriptor.get("runtime"):
         errors.append("receipt runtime does not match declared runtime")
-    if receipt.get("export") != export:
+    if receipt.get("export") != descriptor.get("export"):
         errors.append("receipt export does not match declared export")
-    if descriptor.get("authority") != "none":
-        errors.append("declared callable authority is not none")
 
     target = _source_file(snapshot, entry, receipt)
     if target is None:
@@ -157,20 +149,60 @@ def _validate_receipt(snapshot: Path, registry_by_address: dict[str, dict[str, A
             errors.append("receipt source-file hash does not match captured source bytes")
     if not _valid_sha256(receipt.get("source_file_sha256")):
         errors.append("receipt source-file hash is not a valid SHA-256 identity")
+
+
+def _validate_response(receipt: dict[str, Any], errors: list[str], *, required: bool) -> None:
+    response_hash = receipt.get("response_sha256")
+    if response_hash is None and not required:
+        return
+    if not _valid_sha256(response_hash):
+        errors.append("receipt response hash is not a valid SHA-256 identity")
+        return
+    if response_hash != _canonical_sha256(receipt.get("response")):
+        errors.append("receipt response hash does not match canonical response")
+
+
+def _validate_receipt(snapshot: Path, registry_by_address: dict[str, dict[str, Any]], receipt: Any) -> tuple[str, list[str], dict[str, Any] | None]:
+    errors: list[str] = []
+    if not isinstance(receipt, dict):
+        return "blocked_invalid_receipt", ["receipt must be an object"], None
+    if receipt.get("schema") != RECEIPT_SCHEMA:
+        return "ignored_non_receipt", [], None
+
+    address = receipt.get("address")
+    entry = registry_by_address.get(address) if isinstance(address, str) else None
+    if entry is None:
+        return "blocked_receipt_registry_mismatch", ["receipt address does not exist exactly once in callable registry"], None
+
+    descriptor = entry.get("callable") or {}
+    if entry.get("status") != "declared_callable_not_exercised" or entry.get("errors"):
+        errors.append("registry entry is not a valid declared callable")
+    if receipt.get("module") != entry.get("module") or receipt.get("capability") != entry.get("capability"):
+        errors.append("receipt module/capability identity does not match registry address")
+    if receipt.get("manifest_sha256") != entry.get("manifest_sha256"):
+        errors.append("receipt manifest hash does not match registry manifest hash")
+    if not _valid_sha256(receipt.get("manifest_sha256")):
+        errors.append("receipt manifest hash is not a valid SHA-256 identity")
+    if receipt.get("declared_callable") != descriptor:
+        errors.append("receipt callable descriptor does not match registry declaration")
+    if descriptor.get("authority") != "none":
+        errors.append("declared callable authority is not none")
     if not _valid_sha256(receipt.get("request_sha256")):
         errors.append("receipt request hash is not a valid SHA-256 identity")
 
-    response = receipt.get("response")
-    if not _valid_sha256(receipt.get("response_sha256")):
-        errors.append("receipt response hash is not a valid SHA-256 identity")
-    elif receipt.get("response_sha256") != _canonical_sha256(response):
-        errors.append("receipt response hash does not match canonical response")
-
     status = receipt.get("status")
+    if status not in KNOWN_RECEIPT_STATUSES:
+        errors.append(f"unknown invocation receipt status: {status}")
     execution_flag = receipt.get("source_capability_execution")
+
+    if status in SOURCE_ATTEMPT_STATUSES:
+        _validate_source_identity(snapshot, entry, receipt, errors)
+
     if status == "exercised_with_receipt":
         if execution_flag is not True:
             errors.append("successful receipt must set source_capability_execution true")
+        _validate_response(receipt, errors, required=True)
+        response = receipt.get("response")
         if not isinstance(response, dict) or response.get("ok") is not True:
             errors.append("successful receipt must contain an ok response")
         elif receipt.get("result") != response.get("result"):
@@ -179,6 +211,10 @@ def _validate_receipt(snapshot: Path, registry_by_address: dict[str, dict[str, A
     else:
         if execution_flag is not False:
             errors.append("non-success receipt must not claim source_capability_execution")
+        if status == "source_execution_failed":
+            _validate_response(receipt, errors, required=True)
+        elif status in {"source_execution_timeout", "source_execution_invalid_response"}:
+            _validate_response(receipt, errors, required=False)
         classification = "observed_non_success_receipt"
 
     if errors:

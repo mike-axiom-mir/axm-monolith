@@ -2,6 +2,7 @@ import importlib.util
 import json
 from pathlib import Path
 import shutil
+import sys
 import tempfile
 import unittest
 
@@ -18,7 +19,6 @@ assert invoke_spec.loader
 invoke_spec.loader.exec_module(invoke_declared_callable)
 
 
-@unittest.skipUnless(shutil.which("node"), "Node.js is required for JavaScript callable execution tests")
 class DeclaredCallableInvocationTests(unittest.TestCase):
     def write(self, path: Path, text: str):
         path.parent.mkdir(parents=True, exist_ok=True)
@@ -69,10 +69,42 @@ class DeclaredCallableInvocationTests(unittest.TestCase):
         callable_registry.write_registry(root)
         return marker
 
+    def make_python_snapshot(self, root: Path):
+        module = root / "modules" / "python-module"
+        module.mkdir(parents=True)
+        marker = root / "PYTHON_EXECUTED"
+        marker_literal = repr(str(marker))
+        self.write(module / "callable.py", (
+            "from pathlib import Path\n"
+            f"Path({marker_literal}).write_text('executed', encoding='utf-8')\n"
+            "def sample(value, offset=0):\n"
+            "    return {'value': value, 'sampled': int(value) + int(offset)}\n"
+            "def explode():\n"
+            "    raise RuntimeError('expected python explosion')\n"
+        ))
+        self.write(module / "AXM_MODULE.json", json.dumps({
+            "schema_version": "1.4",
+            "capabilities": [{
+                "id": "demo.python",
+                "callable": {
+                    "schema": "axm.callable-capability/v0.1",
+                    "kind": "module-export",
+                    "runtime": "python",
+                    "path": "callable.py",
+                    "export": "sample",
+                    "authority": "none",
+                    "network": "none"
+                }
+            }]
+        }, indent=2))
+        callable_registry.write_registry(root)
+        return marker
+
     def request(self, *args):
         return {"schema": "axm.callable-invocation-request/v0.1", "args": list(args)}
 
-    def test_execution_requires_explicit_opt_in(self):
+    @unittest.skipUnless(shutil.which("node"), "Node.js is required for JavaScript callable execution tests")
+    def test_javascript_execution_requires_explicit_opt_in(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             marker = self.make_js_snapshot(root)
@@ -83,7 +115,8 @@ class DeclaredCallableInvocationTests(unittest.TestCase):
             self.assertFalse(receipt["source_capability_execution"])
             self.assertFalse(marker.exists(), "module must not even be imported without explicit execution opt-in")
 
-    def test_successful_module_export_emits_identity_bound_receipt(self):
+    @unittest.skipUnless(shutil.which("node"), "Node.js is required for JavaScript callable execution tests")
+    def test_successful_javascript_module_export_emits_identity_bound_receipt(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             marker = self.make_js_snapshot(root)
@@ -100,20 +133,56 @@ class DeclaredCallableInvocationTests(unittest.TestCase):
             self.assertRegex(receipt["response_sha256"], r"^sha256:[a-f0-9]{64}$")
             self.assertIn("no merge/CANON", receipt["truth_boundary"])
 
-    def test_invalid_request_is_blocked_before_source_import(self):
+    def test_python_execution_requires_separate_explicit_opt_in(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
-            marker = self.make_js_snapshot(root)
+            marker = self.make_python_snapshot(root)
             receipt = invoke_declared_callable.invoke_declared_callable(
                 root,
-                "demo-module::demo.double",
-                {"schema": "wrong", "args": [21]},
+                "python-module::demo.python",
+                self.request(21, 4),
                 allow_javascript_esm=True,
+                allow_python=False,
+            )
+            self.assertEqual(receipt["status"], "blocked_explicit_execution_opt_in_required")
+            self.assertFalse(receipt["source_capability_execution"])
+            self.assertFalse(marker.exists(), "Python source must not be imported without Python execution opt-in")
+
+    def test_successful_python_module_export_uses_same_receipt_contract(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            marker = self.make_python_snapshot(root)
+            receipt = invoke_declared_callable.invoke_declared_callable(
+                root,
+                "python-module::demo.python",
+                self.request(21, 4),
+                allow_python=True,
+                python_command=sys.executable,
+            )
+            self.assertEqual(receipt["status"], "exercised_with_receipt")
+            self.assertTrue(receipt["source_capability_execution"])
+            self.assertEqual(receipt["runtime"], "python")
+            self.assertEqual(receipt["result"], {"value": 21, "sampled": 25})
+            self.assertTrue(marker.exists())
+            self.assertRegex(receipt["source_file_sha256"], r"^sha256:[a-f0-9]{64}$")
+            self.assertRegex(receipt["response_sha256"], r"^sha256:[a-f0-9]{64}$")
+
+    def test_invalid_request_is_blocked_before_python_source_import(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            marker = self.make_python_snapshot(root)
+            receipt = invoke_declared_callable.invoke_declared_callable(
+                root,
+                "python-module::demo.python",
+                {"schema": "wrong", "args": [21]},
+                allow_python=True,
+                python_command=sys.executable,
             )
             self.assertEqual(receipt["status"], "blocked_invalid_invocation_request")
             self.assertFalse(marker.exists())
 
-    def test_command_declaration_is_not_executed_by_v0_1_invoker(self):
+    @unittest.skipUnless(shutil.which("node"), "Node.js is required for JavaScript callable execution tests")
+    def test_command_declaration_is_not_executed_by_v0_2_invoker(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             marker = self.make_js_snapshot(root, command=True)
@@ -122,11 +191,13 @@ class DeclaredCallableInvocationTests(unittest.TestCase):
                 "demo-module::demo.command",
                 self.request(),
                 allow_javascript_esm=True,
+                allow_python=True,
             )
             self.assertEqual(receipt["status"], "blocked_unsupported_callable_kind")
             self.assertFalse(marker.exists())
 
-    def test_declared_export_failure_is_preserved_as_failure_receipt(self):
+    @unittest.skipUnless(shutil.which("node"), "Node.js is required for JavaScript callable execution tests")
+    def test_declared_javascript_export_failure_is_preserved_as_failure_receipt(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             module = root / "modules" / "failure-module"
@@ -153,6 +224,38 @@ class DeclaredCallableInvocationTests(unittest.TestCase):
             self.assertEqual(receipt["status"], "source_execution_failed")
             self.assertFalse(receipt["source_capability_execution"])
             self.assertEqual(receipt["response"]["error"]["message"], "expected explosion")
+
+    def test_declared_python_export_failure_is_preserved_as_failure_receipt(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            module = root / "modules" / "python-failure-module"
+            module.mkdir(parents=True)
+            self.write(module / "failure.py", "def explode():\n    raise RuntimeError('expected python explosion')\n")
+            self.write(module / "AXM_MODULE.json", json.dumps({
+                "schema_version": "1.4",
+                "capabilities": [{
+                    "id": "failure.python",
+                    "callable": {
+                        "schema": "axm.callable-capability/v0.1",
+                        "kind": "module-export",
+                        "runtime": "python",
+                        "path": "failure.py",
+                        "export": "explode",
+                        "authority": "none"
+                    }
+                }]
+            }))
+            callable_registry.write_registry(root)
+            receipt = invoke_declared_callable.invoke_declared_callable(
+                root,
+                "python-failure-module::failure.python",
+                self.request(),
+                allow_python=True,
+                python_command=sys.executable,
+            )
+            self.assertEqual(receipt["status"], "source_execution_failed")
+            self.assertFalse(receipt["source_capability_execution"])
+            self.assertEqual(receipt["response"]["error"]["message"], "expected python explosion")
 
 
 if __name__ == "__main__":

@@ -63,14 +63,14 @@ They do not silently fall back to inferred execution.
 
 `tools/invoke_declared_callable.py` is deliberately separate from assembly and registry discovery. It never runs automatically.
 
-v0.1 supports only:
+Execution runtime support is versioned independently from the source descriptor schema. Invoker v0.2 admits only `kind: module-export` with these runtimes:
 
-- `kind: module-export`;
-- `runtime: javascript-esm`;
-- an explicit `--allow-javascript-esm` opt-in;
-- one JSON request envelope containing positional `args`.
+- `runtime: javascript-esm`, requiring explicit `--allow-javascript-esm`;
+- `runtime: python`, requiring explicit `--allow-python`.
 
-The helper does not use a shell. `command` declarations and unsupported runtimes remain blocked.
+Both runners consume the same JSON request envelope containing positional `args` and return the same JSON success/error shape. The invoker never uses a shell. `command` declarations and unsupported runtimes remain blocked.
+
+The Python runner imports the exact declared source file under an isolated generated module name. It is suitable for source files whose declared export can be loaded as that file. Package-specific import contexts that require a different adapter remain outside v0.2 rather than being guessed silently.
 
 A successful invocation writes an `axm.monolith.callable-invocation-receipt/v0.1` receipt bound to:
 
@@ -83,7 +83,18 @@ A successful invocation writes an `axm.monolith.callable-invocation-receipt/v0.1
 
 The resulting status may be `exercised_with_receipt` for that exact invocation. The capability registry itself remains a declaration registry rather than silently rewriting maturity from one run.
 
-Source execution still occurs with the host process permissions of the environment in which the user explicitly invoked it. v0.1 is not a process/network sandbox.
+Source execution still occurs with the host process permissions of the environment in which the user explicitly invoked it. These runtime adapters are not process/network sandboxes.
+
+## Multi-donor / multi-runtime proof rule
+
+A runtime adapter is not called generic merely because one repository succeeds. The current proof lane deliberately uses independent donors:
+
+- a JavaScript ESM callable from Global State RTS;
+- a Python callable from FrameState.
+
+The registry, invoker and ledger implementations must not contain donor-specific source bindings. Exact donor names may appear only in the explicit cross-repo verification workflow that selects which source snapshots to test.
+
+This distinction matters: the verification job is allowed to say which capabilities it wants to exercise; the reusable machinery is not allowed to know the answer in advance.
 
 ## Execution evidence ledger
 

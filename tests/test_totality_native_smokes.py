@@ -41,6 +41,14 @@ class TotalityNativeSmokeGateTest(unittest.TestCase):
     def test_missing_endpoint_is_hold(self):
         self.assertEqual((False, "HOLD_ENDPOINT_MISSING"), mod.gate(None, self.recipe))
 
+    def test_walmi_exact_ref_recipe_is_retained(self):
+        recipes = [r for r in mod.RECIPES if r.get("id") == "walmi-public-capability-verify"]
+        self.assertEqual(1, len(recipes))
+        self.assertEqual("mike-axiom-mir/axm-walmi", recipes[0]["repository"])
+        self.assertEqual("c8913f3a6f42a6498f83d5876b8aee9c56df694f", recipes[0]["commit"])
+        self.assertEqual("axm-walmi::native.command/python-file-cli/tools/verify_public_capability.py", recipes[0]["address"])
+        self.assertEqual(["--root", "."], recipes[0]["args"])
+
 
 if __name__ == "__main__":
     unittest.main()

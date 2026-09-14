@@ -20,6 +20,7 @@ import callable_registry
 import inspect_stack
 import one_click
 import pipeline_fabric
+import schema_probe_wiring
 
 
 SCHEMA = "axm.monolith.plumbing-receipt/v0.1"
@@ -31,6 +32,7 @@ RUNTIME_FILES = (
     "stress_all.py",
     "stress_all_v2.py",
     "monolith_plumbing.py",
+    "schema_probe_wiring.py",
     "finalize_connected_snapshot.py",
     "callable_registry.py",
     "invoke_declared_callable.py",
@@ -139,6 +141,12 @@ def plumb_snapshot(snapshot: str | Path, *, refresh_analysis: bool = True) -> di
         if not analysis_path.is_file():
             raise PlumbingError("snapshot analysis is missing")
         analysis = {"summary": json.loads(analysis_path.read_text(encoding="utf-8"))["summary"]}
+
+    # Learned from real totality wiring: a schema-only module should not remain totally
+    # untestable when exact JSON schema bytes can be syntax-probed safely. This step only
+    # amends generated monolith metadata/queues and never donor module bytes.
+    learned_schema_wiring = schema_probe_wiring.apply(root)
+
     pipelines = pipeline_fabric.export_pipeline_fabric(root)
     callables = callable_registry.write_registry(root)
     launchers = one_click.install_snapshot_launchers(root)
@@ -162,6 +170,7 @@ def plumb_snapshot(snapshot: str | Path, *, refresh_analysis: bool = True) -> di
             "blocked_invalid": callable_summary["blocked_invalid_callable_declaration"],
             "source_callable_executed": 0,
         },
+        "learned_schema_probe_wiring": learned_schema_wiring,
         "candidate_pipeline_fabric": pipelines,
         "one_front_door": launchers,
         "installed_runtime_files": runtime_files,
@@ -170,13 +179,14 @@ def plumb_snapshot(snapshot: str | Path, *, refresh_analysis: bool = True) -> di
             "leaf_registry": "LEAF_CAPABILITY_REGISTRY.json",
             "callable_registry": "CALLABLE_CAPABILITY_REGISTRY.json",
             "pipeline_registry": "PIPELINE_FABRIC.json",
+            "schema_probe_wiring_receipt": schema_probe_wiring.RECEIPT_NAME,
             "receipt": "PLUMBING_RECEIPT.json",
             "execution_lab": execution_lab,
         },
         "truth_boundary": (
             "Plumbing installation makes discovery, invocation and evidence recording available. "
-            "Only a validated execution receipt can prove an exact callable ran; catalogue addresses "
-            "and candidate graph edges remain non-executable claims until then."
+            "Only a validated execution receipt can prove an exact callable ran; catalogue addresses, "
+            "generated JSON syntax probes, and candidate graph edges remain bounded evidence rather than semantic correctness or runtime interoperability."
         ),
     }
     _write_json(root / "PLUMBING_RECEIPT.json", receipt)
@@ -189,10 +199,10 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
     try:
         result = plumb_snapshot(args.snapshot)
-    except (PlumbingError, ValueError, OSError, json.JSONDecodeError) as exc:
+    except (PlumbingError, schema_probe_wiring.SchemaProbeWiringError, ValueError, OSError, json.JSONDecodeError) as exc:
         print(f"monolith plumbing: BLOCKED: {exc}", file=sys.stderr)
         return 2
-    print(json.dumps({"status": result["status"], **result["catalogue"], **result["native_callable_registry"]}, indent=2, sort_keys=True))
+    print(json.dumps({"status": result["status"], **result["catalogue"], **result["native_callable_registry"], "learned_schema_probe_wiring": result["learned_schema_probe_wiring"]}, indent=2, sort_keys=True))
     return 0
 
 

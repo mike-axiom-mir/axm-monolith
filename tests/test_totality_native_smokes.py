@@ -49,6 +49,14 @@ class TotalityNativeSmokeGateTest(unittest.TestCase):
         self.assertEqual("axm-walmi::native.command/python-file-cli/tools/verify_public_capability.py", recipes[0]["address"])
         self.assertEqual(["--root", "."], recipes[0]["args"])
 
+    def test_front_door_exact_ref_recipe_is_retained(self):
+        recipes = [r for r in mod.RECIPES if r.get("id") == "front-door-validate"]
+        self.assertEqual(1, len(recipes))
+        self.assertEqual("mike-axiom-mir/axm-front-door", recipes[0]["repository"])
+        self.assertEqual("05e25b557d076551ac740c4e043a9ccbbb0160ba", recipes[0]["commit"])
+        self.assertEqual("axm-front-door::native.command/python-file-cli/scripts/axm_site.py", recipes[0]["address"])
+        self.assertEqual(["validate"], recipes[0]["args"])
+
 
 if __name__ == "__main__":
     unittest.main()

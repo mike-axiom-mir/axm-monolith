@@ -15,6 +15,7 @@ RECIPES = [
  {"id":"framestate-cli-help","address":"axm-framestate::native.command/python-project-script/framestate","repository":"mike-axiom-mir/axm-framestate","commit":"60ea68ba72e4ad4df8dc5746c6bb18fcd6569a34","args":["--help"]},
  {"id":"machine-voice-cli-help","address":"axm-machine-voice::native.command/python-project-script/axm-machine-voice","repository":"mike-axiom-mir/axm-machine-voice","commit":"b77f6d083db2951d19e082e712fdaa3061ced956","args":["--help"]},
  {"id":"city-p2p-cli-help","address":"axm-city-multiplayer::native.command/python-project-script/axm-p2p","repository":"mike-axiom-mir/axm-city-multiplayer","commit":"002c4465667f9ffbdb6adda06afae8596d340d76","args":["--help"]},
+ {"id":"walmi-public-capability-verify","address":"axm-walmi::native.command/python-file-cli/tools/verify_public_capability.py","repository":"mike-axiom-mir/axm-walmi","commit":"c8913f3a6f42a6498f83d5876b8aee9c56df694f","args":["--root","."]},
 ]
 
 def gate(endpoint: dict[str, Any] | None, recipe: dict[str, Any]) -> tuple[bool,str]:

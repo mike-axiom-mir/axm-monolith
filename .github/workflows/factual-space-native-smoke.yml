@@ -1,0 +1,62 @@
+name: Factual Space native wiring smoke
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/factual-space-native-smoke.yml'
+      - 'tools/totality_native_smokes.py'
+      - 'tests/test_totality_native_smokes.py'
+  pull_request:
+    paths:
+      - '.github/workflows/factual-space-native-smoke.yml'
+      - 'tools/totality_native_smokes.py'
+      - 'tests/test_totality_native_smokes.py'
+
+permissions:
+  contents: read
+
+jobs:
+  exact-ref-source-smoke:
+    runs-on: ubuntu-latest
+    env:
+      PYTHONDONTWRITEBYTECODE: '1'
+      PYTHONUTF8: '1'
+      PYTHONIOENCODING: utf-8
+      FACTUAL_REF: 4ce1726c03fc775276de56d127bf6b393a1139cd
+    steps:
+      - name: Checkout monolith
+        uses: actions/checkout@v6
+      - name: Checkout exact factual-space donor
+        uses: actions/checkout@v6
+        with:
+          repository: mike-axiom-mir/axm-factual-space-simulator
+          ref: 4ce1726c03fc775276de56d127bf6b393a1139cd
+          path: donor
+          persist-credentials: false
+      - name: Setup Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: '3.13'
+      - name: Execute deterministic generate + verify from donor source
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git -C donor rev-parse HEAD)" = "$FACTUAL_REF"
+          export PYTHONPATH="$GITHUB_WORKSPACE/donor/src"
+          OUT="$RUNNER_TEMP/factual-native-smoke"
+          python - <<'PY'
+          import json, os
+          from pathlib import Path
+          from axm_star_sim.cli import main
+          out = Path(os.environ['RUNNER_TEMP']) / 'factual-native-smoke'
+          rc = main(['generate', '--seed', 'AXM-MONOLITH-FACTUAL-SMOKE-001', '--output', str(out)])
+          assert rc == 0, rc
+          rc = main(['verify-ledger', '--output', str(out)])
+          assert rc == 0, rc
+          required = ['system.json', 'runtime_state.json', 'event_ledger.jsonl']
+          missing = [name for name in required if not (out / name).is_file()]
+          assert not missing, missing
+          print(json.dumps({'status':'PASS','output':str(out),'required_files':required}, sort_keys=True))
+          PY
+          test -z "$(git -C donor status --porcelain --untracked-files=all)"

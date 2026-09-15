@@ -65,6 +65,17 @@ class TotalityNativeSmokeGateTest(unittest.TestCase):
         self.assertEqual("axm-living-city-simulator::native.command/node-file-cli/runtime/headless-simulator.js", recipes[0]["address"])
         self.assertEqual(["--help"], recipes[0]["args"])
 
+    def test_grammar_exact_ref_recipe_is_retained(self):
+        recipes = [r for r in mod.RECIPES if r.get("id") == "grammar-102-capability-snapshot-export"]
+        self.assertEqual(1, len(recipes))
+        self.assertEqual("mike-axiom-mir/axm-102-grammer", recipes[0]["repository"])
+        self.assertEqual("ff58375b65a4033041e6de957263d4146aa7429e", recipes[0]["commit"])
+        self.assertEqual("axm-102-grammer::native.command/node-file-cli/bin/axm-grammar-glass-snapshot.js", recipes[0]["address"])
+        self.assertEqual([
+            "create", "--commit", "ff58375b65a4033041e6de957263d4146aa7429e",
+            "--repo", "mike-axiom-mir/axm-102-grammer",
+        ], recipes[0]["args"])
+
 
 if __name__ == "__main__":
     unittest.main()

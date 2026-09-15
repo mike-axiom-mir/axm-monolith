@@ -19,6 +19,7 @@ RECIPES = [
  {"id":"front-door-validate","address":"axm-front-door::native.command/python-file-cli/scripts/axm_site.py","repository":"mike-axiom-mir/axm-front-door","commit":"05e25b557d076551ac740c4e043a9ccbbb0160ba","args":["validate"]},
  {"id":"living-city-headless-main","address":"axm-living-city-simulator::native.command/node-file-cli/runtime/headless-simulator.js","repository":"mike-axiom-mir/axm-living-city-simulator","commit":"a299db639e87b2fa0dea1ded1bf651ab86e9cd3c","args":["--help"]},
  {"id":"grammar-102-capability-snapshot-export","address":"axm-102-grammer::native.command/node-file-cli/bin/axm-grammar-glass-snapshot.js","repository":"mike-axiom-mir/axm-102-grammer","commit":"ff58375b65a4033041e6de957263d4146aa7429e","args":["create","--commit","ff58375b65a4033041e6de957263d4146aa7429e","--repo","mike-axiom-mir/axm-102-grammer"]},
+ {"id":"factual-space-cli-help","address":"axm-factual-space-simulator::native.command/python-project-script/axm-star-sim","repository":"mike-axiom-mir/axm-factual-space-simulator","commit":"4ce1726c03fc775276de56d127bf6b393a1139cd","args":["--help"]},
 ]
 
 def gate(endpoint: dict[str, Any] | None, recipe: dict[str, Any]) -> tuple[bool,str]:

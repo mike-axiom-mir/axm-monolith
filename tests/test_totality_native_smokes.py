@@ -57,6 +57,14 @@ class TotalityNativeSmokeGateTest(unittest.TestCase):
         self.assertEqual("axm-front-door::native.command/python-file-cli/scripts/axm_site.py", recipes[0]["address"])
         self.assertEqual(["validate"], recipes[0]["args"])
 
+    def test_living_city_exact_ref_recipe_is_retained(self):
+        recipes = [r for r in mod.RECIPES if r.get("id") == "living-city-headless-main"]
+        self.assertEqual(1, len(recipes))
+        self.assertEqual("mike-axiom-mir/axm-living-city-simulator", recipes[0]["repository"])
+        self.assertEqual("a299db639e87b2fa0dea1ded1bf651ab86e9cd3c", recipes[0]["commit"])
+        self.assertEqual("axm-living-city-simulator::native.command/node-file-cli/runtime/headless-simulator.js", recipes[0]["address"])
+        self.assertEqual(["--help"], recipes[0]["args"])
+
 
 if __name__ == "__main__":
     unittest.main()

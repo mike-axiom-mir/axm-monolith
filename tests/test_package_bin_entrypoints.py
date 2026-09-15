@@ -1,5 +1,4 @@
 import importlib.util
-import json
 from pathlib import Path
 import tempfile
 import unittest
@@ -25,6 +24,7 @@ class PackageBinEntrypointTest(unittest.TestCase):
             self.assertEqual(["bin/alpha.js", "bin/beta.js"], [r["path"] for r in rows])
             self.assertEqual("declared-package-bin:alpha", rows[0]["evidence"])
             self.assertEqual("node bin/alpha.js", rows[0]["command"])
+            self.assertEqual(["--help"], rows[0]["probe_args"])
 
     def test_string_bin_uses_package_name(self):
         with tempfile.TemporaryDirectory() as td:
@@ -33,6 +33,7 @@ class PackageBinEntrypointTest(unittest.TestCase):
             rows = mod.declared_node_bins(root, {"name": "pkg-cli", "bin": "./cli.js"})
             self.assertEqual(1, len(rows))
             self.assertEqual("declared-package-bin:pkg-cli", rows[0]["evidence"])
+            self.assertEqual(["pkg-cli"], rows[0]["aliases"])
 
     def test_missing_and_escaping_targets_fail_closed(self):
         with tempfile.TemporaryDirectory() as td:
@@ -47,22 +48,35 @@ class PackageBinEntrypointTest(unittest.TestCase):
             finally:
                 outside.unlink(missing_ok=True)
 
-    def test_grammar_shape_discovers_both_bins_without_execution_claim(self):
+    def test_aliases_are_grouped_by_target(self):
         with tempfile.TemporaryDirectory() as td:
             root = Path(td)
-            (root / "bin").mkdir()
-            for name in ("axm-grammar-capabilities.js", "axm-grammar-glass-snapshot.js"):
-                (root / "bin" / name).write_text("#!/usr/bin/env node\n", encoding="utf-8")
-            rows = mod.declared_node_bins(root, {
-                "name": "axm-102-grammar-body",
-                "bin": {
-                    "axm-grammar-capabilities": "bin/axm-grammar-capabilities.js",
-                    "axm-grammar-glass-snapshot": "bin/axm-grammar-glass-snapshot.js",
-                },
-            })
-            self.assertEqual(2, len(rows))
-            self.assertTrue(all(r["kind"] == "node" for r in rows))
-            self.assertTrue(all(r["evidence"].startswith("declared-package-bin:") for r in rows))
+            (root / "cli.js").write_text("#!/usr/bin/env node\n", encoding="utf-8")
+            rows = mod.declared_node_bins(root, {"bin": {"z": "cli.js", "a": "./cli.js"}})
+            self.assertEqual(1, len(rows))
+            self.assertEqual(["a", "z"], rows[0]["aliases"])
+
+    def test_matching_axm_discovery_command_supplies_bounded_probe(self):
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            (root / "cli.js").write_text("#!/usr/bin/env node\n", encoding="utf-8")
+            package = {
+                "bin": {"demo": "cli.js"},
+                "axmCapability": {"entrypoints": {"command": "demo", "discoveryCommand": "demo describe"}},
+            }
+            row = mod.declared_node_bins(root, package)[0]
+            self.assertEqual(["describe"], row["probe_args"])
+            self.assertEqual("axmCapability.discoveryCommand", row["probe_source"])
+
+    def test_mismatched_discovery_command_does_not_cross_bind(self):
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            (root / "cli.js").write_text("#!/usr/bin/env node\n", encoding="utf-8")
+            package = {
+                "bin": {"demo": "cli.js"},
+                "axmCapability": {"entrypoints": {"command": "other", "discoveryCommand": "other describe"}},
+            }
+            self.assertEqual(["--help"], mod.declared_node_bins(root, package)[0]["probe_args"])
 
 
 if __name__ == "__main__":

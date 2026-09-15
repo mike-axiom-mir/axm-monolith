@@ -84,6 +84,27 @@ class TotalityNativeSmokeGateTest(unittest.TestCase):
         self.assertEqual("axm-factual-space-simulator::native.command/python-project-script/axm-star-sim", recipes[0]["address"])
         self.assertEqual(["--help"], recipes[0]["args"])
 
+    def test_factual_space_functional_project_script_recipes_are_retained(self):
+        expected = {
+            "factual-rooted-crew-verify-roots": ("axm-rooted-crew", ["verify-roots"]),
+            "factual-ship-blueprint-validate": ("axm-ship-blueprint", ["validate"]),
+            "factual-ship-interior-validate": ("axm-ship-interior", ["validate"]),
+            "factual-handoff-full-audit": ("axm-handoff", ["audit", "--full"]),
+            "factual-package-seal-check": ("axm-package-seal", ["--check"]),
+        }
+        selected = {r["id"]: r for r in mod.RECIPES if r.get("id") in expected}
+        self.assertEqual(set(expected), set(selected))
+        for recipe_id, (script, args) in expected.items():
+            recipe = selected[recipe_id]
+            self.assertEqual("mike-axiom-mir/axm-factual-space-simulator", recipe["repository"])
+            self.assertEqual("4ce1726c03fc775276de56d127bf6b393a1139cd", recipe["commit"])
+            self.assertEqual(
+                f"axm-factual-space-simulator::native.command/python-project-script/{script}",
+                recipe["address"],
+            )
+            self.assertEqual(args, recipe["args"])
+            self.assertNotIn("python-file-cli/src/axm_star_sim/", recipe["address"])
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -76,6 +76,14 @@ class TotalityNativeSmokeGateTest(unittest.TestCase):
             "--repo", "mike-axiom-mir/axm-102-grammer",
         ], recipes[0]["args"])
 
+    def test_factual_space_exact_ref_recipe_is_retained(self):
+        recipes = [r for r in mod.RECIPES if r.get("id") == "factual-space-cli-help"]
+        self.assertEqual(1, len(recipes))
+        self.assertEqual("mike-axiom-mir/axm-factual-space-simulator", recipes[0]["repository"])
+        self.assertEqual("4ce1726c03fc775276de56d127bf6b393a1139cd", recipes[0]["commit"])
+        self.assertEqual("axm-factual-space-simulator::native.command/python-project-script/axm-star-sim", recipes[0]["address"])
+        self.assertEqual(["--help"], recipes[0]["args"])
+
 
 if __name__ == "__main__":
     unittest.main()

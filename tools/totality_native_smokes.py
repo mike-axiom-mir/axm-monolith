@@ -17,6 +17,7 @@ RECIPES = [
  {"id":"city-p2p-cli-help","address":"axm-city-multiplayer::native.command/python-project-script/axm-p2p","repository":"mike-axiom-mir/axm-city-multiplayer","commit":"002c4465667f9ffbdb6adda06afae8596d340d76","args":["--help"]},
  {"id":"walmi-public-capability-verify","address":"axm-walmi::native.command/python-file-cli/tools/verify_public_capability.py","repository":"mike-axiom-mir/axm-walmi","commit":"c8913f3a6f42a6498f83d5876b8aee9c56df694f","args":["--root","."]},
  {"id":"front-door-validate","address":"axm-front-door::native.command/python-file-cli/scripts/axm_site.py","repository":"mike-axiom-mir/axm-front-door","commit":"05e25b557d076551ac740c4e043a9ccbbb0160ba","args":["validate"]},
+ {"id":"living-city-headless-main","address":"axm-living-city-simulator::native.command/node-file-cli/runtime/headless-simulator.js","repository":"mike-axiom-mir/axm-living-city-simulator","commit":"a299db639e87b2fa0dea1ded1bf651ab86e9cd3c","args":["--help"]},
 ]
 
 def gate(endpoint: dict[str, Any] | None, recipe: dict[str, Any]) -> tuple[bool,str]:
